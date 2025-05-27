@@ -1,0 +1,49 @@
+---
+title: "DSS Analysis"
+author: "Cemile Balkas"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This document performs analysis of differentially methylated regions (DMRs) using the DSS package in R. The input data is from Oxford Nanopore bisulfite sequencing and reformatted to make it compatible for DSS.
+
+## Setup
+
+Make sure the following packages are installed before running this document:
+
+
+```{r itit}
+# Make sure the following packages are installed before running this document:
+# Run this once in your R console (not inside this Rmd)
+# BiocManager::install("DSS")
+
+# Load required libraries
+library(DSS)
+require(bsseq)
+
+```
+
+# Read Files
+
+
+```{r load-data}
+# Load methylation count data: chr, pos, total reads (N), methylated reads (X)
+ko <- read.table("dss_data_HCT116_3BKO_subset.bed", header = FALSE)
+wt <- read.table("dss_data_HCT116_WT_subset.bed", header = FALSE)
+
+colnames(ko) <- c("chr", "pos", "N", "X")
+colnames(wt) <- c("chr", "pos", "N", "X")
+
+# Create BSseq object
+# This object holds methylation information in the structure DSS requires
+BSobj <- makeBSseqData(list(ko, wt), c("KO", "WT"))
+
+# View summary of the BSseq object
+BSobj
+```
+
