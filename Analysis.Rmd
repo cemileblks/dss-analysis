@@ -14,9 +14,6 @@ This document performs analysis of differentially methylated regions (DMRs) usin
 
 ## Setup
 
-Make sure the following packages are installed before running this document:
-
-
 ```{r itit}
 # Make sure the following packages are installed before running this document:
 # Run this once in your R console (not inside this Rmd)
@@ -30,7 +27,6 @@ require(bsseq)
 
 # Read Files
 
-
 ```{r load-data}
 # Load methylation count data: chr, pos, total reads (N), methylated reads (X)
 ko <- read.table("dss_data_HCT116_3BKO_subset.bed", header = FALSE)
@@ -41,9 +37,62 @@ colnames(wt) <- c("chr", "pos", "N", "X")
 
 # Create BSseq object
 # This object holds methylation information in the structure DSS requires
-BSobj <- makeBSseqData(list(ko, wt), c("KO", "WT"))
+BSobj <- makeBSseqData(list(wt, ko), c("WT", "KO"))
 
 # View summary of the BSseq object
 BSobj
 ```
+
+##  Differential Methylation Loci (DML) test
+
+DML test between the two groups (KO vs WT) is performed using the DMLtest function from the DSS package. This tests each CpG site for significant differences in methylation level between groups, applying smoothing to borrow strength from neighboring sites, but is needed in this case because there are no replicates. 
+
+```{r dml-test}
+# Run DML test with smoothing (recommended for WGBS data and when there are no replicates)
+dmlTest.sm <- DMLtest(BSobj,  group1="WT", group2="KO", smoothing=TRUE)
+head(dmlTest.sm)
+```
+## Identify DMLs based on statistical test results
+
+With the test results, the callDML function was called. The results DMLs are sorted by the significance.
+
+```{r}
+# Null hypothesis: the diff. in methylation levels is 0 between groups (mu1 = mu2)
+# No minimum effect size required
+dmls <- callDML(dmlTest.sm, p.threshold = 0.001)
+head(dmls)
+
+# Null hypothesis: the difference in methylation is less than or equal to delta (|mu1 - mu2| ≤ 0.1)
+# This filters for biologically meaningful changes (at least 10%)
+dmls2 <- callDML(dmlTest.sm, delta = 0.1, p.threshold = 0.001)
+head(dmls2)
+```
+
+
+## Identify DMRs by grouping nearby significant CpGs (DMLs)
+
+
+After the identification of differentially methylated loci (DMLs), differentially methylated regions (DMRs) were identified. The `callDMR()` function from the DSS package was used. Regions are identified based on significance thresholds for both statistical confidence (p-value) and the magnitude of methylation difference (delta). This step summarises broader methylation patterns than just the single loci differences.
+
+
+```{r dmr-call}
+# Detect DMRs based on smoothed DML test results
+# p.threshold filters CpG sites with p-values below 0.01
+dmrs = callDMR(dmlTest.sm, p.threshold=0.01)
+head(dmrs)
+
+# Apply an additional effect size threshold (e.g. delta = 0.1)
+dmrs_strict = callDMR(dmlTest.sm, delta=0.1, p.threshold=0.05)
+head(dmrs_strict)
+
+showOneDMR(dmrs_strict[1,], BSobj)
+
+```
+
+## Session Info
+
+```{r session-info}
+sessionInfo()
+```
+
 
