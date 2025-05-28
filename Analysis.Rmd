@@ -89,6 +89,19 @@ showOneDMR(dmrs_strict[1,], BSobj)
 
 ```
 
+## Save DMR and DML results for IGV
+
+```{r}
+write.table(dmrs[, c("chr", "start", "end")],
+            file = "dmrs.bed",
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+write.table(dmls[, c("chr", "pos", "pos")],
+            file = "dmls_simple.bed",
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+```
+
+
 ## Session Info
 
 ```{r session-info}
