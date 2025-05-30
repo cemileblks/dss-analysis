@@ -22,9 +22,9 @@ if [ -z "$1" ]; then
 fi
 
 INPUT_FILE=$1
-# Extract base name (remove path)
+# Extract base name (remove path) amd change file extenstion to dssin to signify file input for dss
 BASENAME=$(basename "$INPUT_FILE")
-OUTFILE="dss_data_${BASENAME}"
+OUTFILE="dss_data_${BASENAME%.*}.dssin"
 
 echo "Processing file: $INPUT_FILE"
 echo "Saving output to: $OUTFILE"
@@ -35,3 +35,9 @@ awk 'BEGIN{OFS="\t"} {print $1, $2, $10, $12}' "$INPUT_FILE" > "$OUTFILE"
 # Confirm success
 echo "Conversion complete. Output file: $(realpath "$OUTFILE")"
 ls -lh "$OUTFILE"
+
+# UPDATES TO MAKE:
+# CHECK IF IT IS OXFORD NANAOPORE BEDMETHYL FILE (CHECK NUMBER OF COLOUMNS ARE 18 AND AND IF POS, N AND X ARE NUMBERS) 
+# SORT BY CHROMOSOME AND POSITION BEFORE SAVING TO OUTPUT FILE 
+# CHANGE THE OUTPUT FILE TO .DSS INSTEAD OF BED FILES BECAUSE THEY ARE NOT BED FILES
+# GZIP THE FILE OUTPUT BECAUSE R CAN READ GZIPPED FILES AND TO SAVE SPACE
