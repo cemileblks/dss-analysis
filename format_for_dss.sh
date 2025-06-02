@@ -33,7 +33,7 @@ echo "Processing file: $INPUT_FILE"
 echo "Saving output to: $OUTFILE"
 
 # Extract needed columns: chr, pos, Nvalid_cov (col 10), Nmod (col 12). Sort and compress.
-awk 'BEGIN{OFS="\t"} {print $1, $2, $10, $12}' "$INPUT_FILE" | sort -k1,1 -k2,2n | gzip > "$OUTFILE"
+awk 'BEGIN{OFS="\t"} {print $1, $2, $10, $12}' "$INPUT_FILE" | sort -k1,1V -k2,2n | gzip > "$OUTFILE"
 
 # Confirm success
 echo "Conversion complete. Output file: $(realpath "$OUTFILE")"
