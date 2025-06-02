@@ -2,7 +2,12 @@
 title: "DSS Analysis"
 author: "Cemile Balkas"
 output: html_document
+params:
+  input1: "HCT116_WT_subset.tidy.dssin.gz" # Reference group 
+  input2: "HCT116_3BKO_subset.tidy.dssin.gz" # Test group
 ---
+
+To run on command line Rscript -e "rmarkdown::render('Analysis.Rmd', params = list(input1 = 'file_name', input2 = 'file_name'))"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -10,7 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Introduction
 
-This document performs analysis of differentially methylated regions (DMRs) using the DSS package in R. The input data is from Oxford Nanopore bisulfite sequencing and reformatted to make it compatible for DSS.
+This script performs analysis of differentially methylated regions (DMRs) using the DSS package. The input data is from Oxford Nanopore bisulfite sequencing and reformatted to make it compatible for DSS.
 
 ## Setup
 
@@ -25,15 +30,26 @@ require(bsseq)
 
 ```
 
+
+```{r}
+cat("Comparing methylation between:\n")
+cat("  - Reference group:", params$input1, "\n")
+cat("  - Test group:", params$input2, "\n")
+
+```
+
 # Read Files
 
 ```{r load-data}
 # Load methylation count data: chr, pos, total reads (N), methylated reads (X)
-ko <- read.table("dss_data_HCT116_3BKO_subset.bed", header = FALSE)
-wt <- read.table("dss_data_HCT116_WT_subset.bed", header = FALSE)
+wt_file <- params$input1
+ko_file <- params$input2
 
-colnames(ko) <- c("chr", "pos", "N", "X")
+wt <- read.table(wt_file, header = FALSE)
+ko <- read.table(ko_file, header = FALSE)
+
 colnames(wt) <- c("chr", "pos", "N", "X")
+colnames(ko) <- c("chr", "pos", "N", "X")
 
 # Create BSseq object
 # This object holds methylation information in the structure DSS requires
@@ -45,7 +61,7 @@ BSobj
 
 ##  Differential Methylation Loci (DML) test
 
-DML test between the two groups (KO vs WT) is performed using the DMLtest function from the DSS package. This tests each CpG site for significant differences in methylation level between groups, applying smoothing to borrow strength from neighboring sites, but is needed in this case because there are no replicates. 
+DML test between the two groups (KO vs WT) is performed using the DMLtest function from the DSS package. This tests each CpG site for significant differences in methylation level between groups, applying smoothing to borrow strength from neighboring sites, but is also needed in this case because there are no replicates. 
 
 ```{r dml-test}
 # Run DML test with smoothing (recommended for WGBS data and when there are no replicates)
@@ -63,17 +79,14 @@ dmls <- callDML(dmlTest.sm, p.threshold = 0.001)
 head(dmls)
 
 # Null hypothesis: the difference in methylation is less than or equal to delta (|mu1 - mu2| ≤ 0.1)
-# This filters for biologically meaningful changes (at least 10%)
-dmls2 <- callDML(dmlTest.sm, delta = 0.1, p.threshold = 0.001)
-head(dmls2)
+# Code below filters for biologically meaningful changes (at least 10%)
+dmls_strict <- callDML(dmlTest.sm, delta = 0.1, p.threshold = 0.001)
+head(dmls_strict)
 ```
-
 
 ## Identify DMRs by grouping nearby significant CpGs (DMLs)
 
-
-After the identification of differentially methylated loci (DMLs), differentially methylated regions (DMRs) were identified. The `callDMR()` function from the DSS package was used. Regions are identified based on significance thresholds for both statistical confidence (p-value) and the magnitude of methylation difference (delta). This step summarises broader methylation patterns than just the single loci differences.
-
+After the identification of differentially methylated loci (DMLs), differentially methylated regions (DMRs) were identified. The callDMR() function from the DSS was used. Regions are identified based on significance thresholds for both statistical confidence (p-value) and the magnitude of methylation difference (delta). This step summarises regional methylation patterns than just the single loci differences.
 
 ```{r dmr-call}
 # Detect DMRs based on smoothed DML test results
@@ -89,16 +102,50 @@ showOneDMR(dmrs_strict[1,], BSobj)
 
 ```
 
+```{r sort_dmrs}
+dmrs_hyper <- subset(dmrs, diff.Methy < 0)
+dmrs_hypo  <- subset(dmrs, diff.Methy > 0)
+
+dmrs_strict_hyper <- subset(dmrs_strict, diff.Methy < 0)
+dmrs_strict_hypo  <- subset(dmrs_strict, diff.Methy > 0)
+```
+
+
+
 ## Save DMR and DML results for IGV
 
 ```{r}
+today <- format(Sys.Date(), "%d_%m_%Y")
+
+# Get plain file name
+ref_name <- tools::file_path_sans_ext(basename(params$input1), compression = TRUE)
+ref_name <- tools::file_path_sans_ext(ref_name, compression = TRUE)
+test_name <- tools::file_path_sans_ext(basename(params$input2), compression = TRUE)
+test_name <- tools::file_path_sans_ext(test_name, compression = TRUE)
+
+# Create file prefix
+prefix <- paste0("HG38_", today, "_", toupper(test_name), "_VS_", toupper(ref_name))
+
+dmr_file_strict <- paste0(prefix, "_DMRs_STRICT.bed")
+dmr_file <- paste0(prefix, "_DMRs.bed")
+dml_file <- paste0(prefix, "_DMLs_ALL.bed")
+
+# Write results to files
 write.table(dmrs[, c("chr", "start", "end")],
-            file = "dmrs.bed",
+            file = dmr_file,
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+write.table(dmrs_strict[, c("chr", "start", "end")],
+            file = dmr_file_strict,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
 write.table(dmls[, c("chr", "pos", "pos")],
-            file = "dmls_simple.bed",
+            file = dml_file,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+cat("Saving DMLs to:", dml_file, "\n")
+cat("Saving DMRs to:", dmr_file, "\n")
+cat("Saving strict DMRs to:", dmr_file_strict, "\n")
 ```
 
 
