@@ -3,8 +3,8 @@ title: "DSS Analysis"
 author: "Cemile Balkas"
 output: html_document
 params:
-  input1: "HCT116_WT_subset.tidy.dssin.gz" # Reference group 
-  input2: "HCT116_3BKO_subset.tidy.dssin.gz" # Test group
+  input1: "WT_WG.tidy.dssin.gz" # Reference group 
+  input2: "3BKO_WG.tidy.dssin.gz" # Test group
 ---
 
 To run on command line Rscript -e "rmarkdown::render('Analysis.Rmd', params = list(input1 = 'file_name', input2 = 'file_name'))"
@@ -59,13 +59,45 @@ BSobj <- makeBSseqData(list(wt, ko), c("WT", "KO"))
 BSobj
 ```
 
+## Box plot Coverage comparison between crhomsomomes
+
+```{r coverage-boxplots}
+# Canonical chromosome levels
+canon_chrs <- paste0("chr", 1:22)
+
+# Makes the chr column is a factor with correct order
+wt$chr <- factor(wt$chr, levels = canon_chrs)
+ko$chr <- factor(ko$chr, levels = canon_chrs)
+
+# WT coverage boxplot
+boxplot(N ~ chr, data = wt,
+        main = "Coverage by Chromosome (WT)",
+        ylab = "Coverage (N)",
+        xlab = "Chromosome",
+        col = "skyblue",
+        outline = FALSE,
+        las = 2, cex.axis = 0.7)
+
+# KO coverage boxplot
+boxplot(N ~ chr, data = ko,
+        main = "Coverage by Chromosome (3BKO)",
+        ylab = "Coverage (N)",
+        xlab = "Chromosome",
+        col = "coral",
+        outline = FALSE,
+        las = 2, cex.axis = 0.7)
+```
+
+
+
+
 ##  Differential Methylation Loci (DML) test
 
 DML test between the two groups (KO vs WT) is performed using the DMLtest function from the DSS package. This tests each CpG site for significant differences in methylation level between groups, applying smoothing to borrow strength from neighboring sites, but is also needed in this case because there are no replicates. 
 
 ```{r dml-test}
 # Run DML test with smoothing (recommended for WGBS data and when there are no replicates)
-dmlTest.sm <- DMLtest(BSobj,  group1="WT", group2="KO", smoothing=TRUE)
+dmlTest.sm <- DMLtest(BSobj,  group1="WT", group2="KO", smoothing=TRUE, ncores=4)
 head(dmlTest.sm)
 ```
 ## Identify DMLs based on statistical test results
@@ -82,6 +114,11 @@ head(dmls)
 # Code below filters for biologically meaningful changes (at least 10%)
 dmls_strict <- callDML(dmlTest.sm, delta = 0.1, p.threshold = 0.001)
 head(dmls_strict)
+
+# For DMLs
+dmls_strict$start <- dmls$pos - 1
+# dmls$end <- dmls$pos
+
 ```
 
 ## Identify DMRs by grouping nearby significant CpGs (DMLs)
@@ -95,26 +132,68 @@ dmrs = callDMR(dmlTest.sm, p.threshold=0.01)
 head(dmrs)
 
 # Apply an additional effect size threshold (e.g. delta = 0.1)
-dmrs_strict = callDMR(dmlTest.sm, delta=0.1, p.threshold=0.05)
+dmrs_strict = callDMR(dmlTest.sm, 
+                      delta=0.1, 
+                      p.threshold=0.01, 
+                      minlen = 50, # min length of the DMR (def: 50bp)
+                      minCG = 3, # min number of CpG sites required for DMR
+                      dis.merge = 50, # when two DMRs are closer to each other than this value they are merged (def:50)
+                      pct.sig = 0.9) # % of CG sites with significant p values
 head(dmrs_strict)
 
 showOneDMR(dmrs_strict[1,], BSobj)
 
+dmrs$end <- dmrs$end + 2
+dmrs_strict$end <- dmrs_strict$end + 2
+head(dmrs)
+
+# order dmrs using chromosome and start pos
+# Set chromosome column as a factor with the correct order
+dmrs_strict$chr <- factor(dmrs_strict$chr, levels = canon_chrs)
+
+# Order by chr (with factor level order) and then by start
+dmrs_strict <- dmrs_strict[order(dmrs_strict$chr, dmrs_strict$start), ]
+head(dmrs_strict)
+
 ```
 
-```{r sort_dmrs}
-dmrs_hyper <- subset(dmrs, diff.Methy < 0)
-dmrs_hypo  <- subset(dmrs, diff.Methy > 0)
+```{r index-dmrs}
+# Define group and direction labels
+test_label <- "HCT116_3BKO"
+dmr_id_prefix <- paste0(test_label, "_DSS_DMR")
+
+# Add DMR name (ID) column to dmrs
+dmrs$name <- paste0(dmr_id_prefix, "_", seq_len(nrow(dmrs)), "_", toupper(dmrs$chr))
+
+dmr_strict_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT")
+
+dmrs_strict$DMR_ID <- seq_len(nrow(dmrs_strict))
+dmrs_strict$name <- paste0(dmr_strict_id_prefix, "_", dmrs_strict$DMR_ID, "_", toupper(dmrs_strict$chr))
+
+```
+
+
+```{r sort-dmrs}
+# dmrs_hyper <- subset(dmrs, diff.Methy < 0)
+# dmrs_hypo  <- subset(dmrs, diff.Methy > 0)
 
 dmrs_strict_hyper <- subset(dmrs_strict, diff.Methy < 0)
 dmrs_strict_hypo  <- subset(dmrs_strict, diff.Methy > 0)
-```
 
+dmr_strict_hyper_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT_HYPER")
+dmrs_strict_hypo_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT_HYPO")
+
+dmrs_strict_hyper$name <- sub("DMR_STRICT_", "DMR_STRICT_HYPER_", dmrs_strict_hyper$name)
+dmrs_strict_hypo$name  <- sub("DMR_STRICT_", "DMR_STRICT_HYPO_", dmrs_strict_hypo$name)
+
+```
 
 
 ## Save DMR and DML results for IGV
 
 ```{r}
+options(scipen=999) # to prevent scientific notation on tables
+
 today <- format(Sys.Date(), "%d_%m_%Y")
 
 # Get plain file name
@@ -129,23 +208,38 @@ prefix <- paste0("HG38_", today, "_", toupper(test_name), "_VS_", toupper(ref_na
 dmr_file_strict <- paste0(prefix, "_DMRs_STRICT.bed")
 dmr_file <- paste0(prefix, "_DMRs.bed")
 dml_file <- paste0(prefix, "_DMLs_ALL.bed")
+# Additional hyp/hyper output files
+dmr_file_strict_hyper <- paste0(prefix, "_DMRs_STRICT_HYPER.bed")
+dmr_file_strict_hypo  <- paste0(prefix, "_DMRs_STRICT_HYPO.bed")
 
 # Write results to files
-write.table(dmrs[, c("chr", "start", "end")],
+write.table(dmrs[, c("chr", "start", "end", "name")],
             file = dmr_file,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
-write.table(dmrs_strict[, c("chr", "start", "end")],
+write.table(dmrs_strict[, c("chr", "start", "end", "name")],
             file = dmr_file_strict,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
-write.table(dmls[, c("chr", "pos", "pos")],
+write.table(dmls_strict[, c("chr", "pos", "pos")],
             file = dml_file,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
+write.table(dmrs_strict_hyper[, c("chr", "start", "end", "name")],
+            file = dmr_file_strict_hyper,
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+write.table(dmrs_strict_hypo[, c("chr", "start", "end", "name")],
+            file = dmr_file_strict_hypo,
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+# Outputs
 cat("Saving DMLs to:", dml_file, "\n")
 cat("Saving DMRs to:", dmr_file, "\n")
 cat("Saving strict DMRs to:", dmr_file_strict, "\n")
+
+cat("Saving strict hyper DMRs to:", dmr_file_strict_hyper, "\n")
+cat("Saving strict hypo DMRs to:", dmr_file_strict_hypo, "\n")
 ```
 
 
