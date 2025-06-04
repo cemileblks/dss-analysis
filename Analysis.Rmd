@@ -15,14 +15,18 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Introduction
 
-This script performs analysis of differentially methylated regions (DMRs) using the DSS package. The input data is from Oxford Nanopore bisulfite sequencing and reformatted to make it compatible for DSS.
+This script performs analysis of differentially methylated regions (DMRs) using the DSS package. The input data is from Oxford Nanopore bisulfite sequencing and reformatted to make it compatible for DSS. DSS was chosen due to its accuracy in calling DMRs. 
 
 ## Setup
 
 ```{r itit}
-# Make sure the following packages are installed before running this document:
-# Run this once in your R console (not inside this Rmd)
-# BiocManager::install("DSS")
+# Makes sure the necessary packages are installed before running this document
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+if (!requireNamespace("DSS", quietly = TRUE)) {
+  BiocManager::install("DSS")
+}
 
 # Load required libraries
 library(DSS)
@@ -59,7 +63,9 @@ BSobj <- makeBSseqData(list(wt, ko), c("WT", "KO"))
 BSobj
 ```
 
-## Box plot Coverage comparison between crhomsomomes
+## Coverage comparison across chromosomes
+
+Before performing differential methylation analysis the read coverage between chromosomes can be checked to see if the coverage is consistent and sufficient across chromosomes. This is to make sure that the detected DMRs are not artefacts of uneven sequencing depth. 
 
 ```{r coverage-boxplots}
 # Canonical chromosome levels
@@ -69,31 +75,27 @@ canon_chrs <- paste0("chr", 1:22)
 wt$chr <- factor(wt$chr, levels = canon_chrs)
 ko$chr <- factor(ko$chr, levels = canon_chrs)
 
-# WT coverage boxplot
+# Reference group coverage boxplot for each chromosome
 boxplot(N ~ chr, data = wt,
-        main = "Coverage by Chromosome (WT)",
+        main = paste0("Coverage by Chromosome Reference Group \n(", params$input1, ")"),
         ylab = "Coverage (N)",
         xlab = "Chromosome",
         col = "skyblue",
         outline = FALSE,
         las = 2, cex.axis = 0.7)
 
-# KO coverage boxplot
+# Test group coverage boxplot
 boxplot(N ~ chr, data = ko,
-        main = "Coverage by Chromosome (3BKO)",
+        main = paste0("Coverage by Chromosome Test Group \n(", params$input2, ")"),
         ylab = "Coverage (N)",
         xlab = "Chromosome",
         col = "coral",
         outline = FALSE,
         las = 2, cex.axis = 0.7)
 ```
-
-
-
-
 ##  Differential Methylation Loci (DML) test
 
-DML test between the two groups (KO vs WT) is performed using the DMLtest function from the DSS package. This tests each CpG site for significant differences in methylation level between groups, applying smoothing to borrow strength from neighboring sites, but is also needed in this case because there are no replicates. 
+DML test between the two groups is performed using the DMLtest function from the DSS package. This tests each CpG site for significant differences in methylation level between groups, applying smoothing to borrow strength from neighboring sites, but is compulsary for DSS when there are no replicates. 
 
 ```{r dml-test}
 # Run DML test with smoothing (recommended for WGBS data and when there are no replicates)
@@ -102,7 +104,7 @@ head(dmlTest.sm)
 ```
 ## Identify DMLs based on statistical test results
 
-With the test results, the callDML function was called. The results DMLs are sorted by the significance.
+With the test results, the callDML function was called. The results are DMLs are sorted by their significance.
 
 ```{r}
 # Null hypothesis: the diff. in methylation levels is 0 between groups (mu1 = mu2)
@@ -115,67 +117,73 @@ head(dmls)
 dmls_strict <- callDML(dmlTest.sm, delta = 0.1, p.threshold = 0.001)
 head(dmls_strict)
 
-# For DMLs
-dmls_strict$start <- dmls$pos - 1
-# dmls$end <- dmls$pos
+# For DMLs add +2 to cover the whole CpG site as the locus
+dmls_strict$end <- dmls$pos + 2
 
 ```
 
 ## Identify DMRs by grouping nearby significant CpGs (DMLs)
 
-After the identification of differentially methylated loci (DMLs), differentially methylated regions (DMRs) were identified. The callDMR() function from the DSS was used. Regions are identified based on significance thresholds for both statistical confidence (p-value) and the magnitude of methylation difference (delta). This step summarises regional methylation patterns than just the single loci differences.
+After the identification of differentially methylated loci (DMLs), differentially methylated regions (DMRs) are identified. The callDMR() function from DSS was used. Regions are identified based on significance thresholds for both statistical confidence (p-value) and the magnitude of methylation difference (delta). This step summarises regional methylation patterns than just the single loci differences.
 
 ```{r dmr-call}
 # Detect DMRs based on smoothed DML test results
-# p.threshold filters CpG sites with p-values below 0.01
+# Call DMRs using p-value threshold only (no effect size filter)
 dmrs = callDMR(dmlTest.sm, p.threshold=0.01)
 head(dmrs)
 
-# Apply an additional effect size threshold (e.g. delta = 0.1)
-dmrs_strict = callDMR(dmlTest.sm, 
-                      delta=0.1, 
-                      p.threshold=0.01, 
-                      minlen = 50, # min length of the DMR (def: 50bp)
-                      minCG = 3, # min number of CpG sites required for DMR
-                      dis.merge = 50, # when two DMRs are closer to each other than this value they are merged (def:50)
-                      pct.sig = 0.9) # % of CG sites with significant p values
+# Call stricter DMRs using both p-value and effect size thresholds
+dmrs_strict <- callDMR(dmlTest.sm, 
+                       delta = 0.1,         # minimum methylation difference (default: 0)
+                       p.threshold = 0.01,  # significance threshold (default: 1e-5)
+                       minlen = 50,         # minimum DMR length in bp (default: 50)
+                       minCG = 3,           # minimum number of CpGs per DMR (default: 3)
+                       dis.merge = 50,      # merge DMRs closer than this (default: 50 bps)
+                       pct.sig = 0.9)       # % of significant CpGs required (default: 0.5)
 head(dmrs_strict)
 
+# Visualise an example DMR
 showOneDMR(dmrs_strict[1,], BSobj)
 
+# Extend end coordinate to cover the full CpG site at the end (2bp) for IGV visualisation
 dmrs$end <- dmrs$end + 2
 dmrs_strict$end <- dmrs_strict$end + 2
-head(dmrs)
 
-# order dmrs using chromosome and start pos
-# Set chromosome column as a factor with the correct order
+# Sort strict DMRs by chromosome and start position
+# Set chromosome column as a factor with canonical order
 dmrs_strict$chr <- factor(dmrs_strict$chr, levels = canon_chrs)
 
-# Order by chr (with factor level order) and then by start
+# Order by chromosomes (with factor level order) and then by start position
 dmrs_strict <- dmrs_strict[order(dmrs_strict$chr, dmrs_strict$start), ]
 head(dmrs_strict)
-
 ```
+### Assign unique identifiers to each DMR
+
+Each DMR is assigned a descriptive name to help track and label them in IGV and downstream analysis.
 
 ```{r index-dmrs}
-# Define group and direction labels
+# Define group label for use in DMR names
 test_label <- "HCT116_3BKO"
-dmr_id_prefix <- paste0(test_label, "_DSS_DMR")
 
-# Add DMR name (ID) column to dmrs
+# Create DMR names for the non-strict DMR set
+dmr_id_prefix <- paste0(test_label, "_DSS_DMR")
 dmrs$name <- paste0(dmr_id_prefix, "_", seq_len(nrow(dmrs)), "_", toupper(dmrs$chr))
 
+# Create DMR names and numeric IDs for the strict DMR set
 dmr_strict_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT")
-
 dmrs_strict$DMR_ID <- seq_len(nrow(dmrs_strict))
 dmrs_strict$name <- paste0(dmr_strict_id_prefix, "_", dmrs_strict$DMR_ID, "_", toupper(dmrs_strict$chr))
 
 ```
 
+### Split strict DMRs by methylation direction
+
+The DMRs are split into hypermethylated and hypomethylated groups based on the direction of change in methylation between groups, and the region names are updated accordingly.
 
 ```{r sort-dmrs}
-# dmrs_hyper <- subset(dmrs, diff.Methy < 0)
-# dmrs_hypo  <- subset(dmrs, diff.Methy > 0)
+# based on the direction of methylation change (diff.Methy):
+#   - Negative = hyper in reference (WT), hypo in test (3BKO)
+#   - Positive = hypo in reference (WT), hyper in test (3BKO)
 
 dmrs_strict_hyper <- subset(dmrs_strict, diff.Methy < 0)
 dmrs_strict_hypo  <- subset(dmrs_strict, diff.Methy > 0)
@@ -183,13 +191,26 @@ dmrs_strict_hypo  <- subset(dmrs_strict, diff.Methy > 0)
 dmr_strict_hyper_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT_HYPER")
 dmrs_strict_hypo_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT_HYPO")
 
+# Update DMR names to include methylation direction
 dmrs_strict_hyper$name <- sub("DMR_STRICT_", "DMR_STRICT_HYPER_", dmrs_strict_hyper$name)
 dmrs_strict_hypo$name  <- sub("DMR_STRICT_", "DMR_STRICT_HYPO_", dmrs_strict_hypo$name)
 
 ```
 
+## Output Summary
 
-## Save DMR and DML results for IGV
+```{r}
+cat("Output Summary:\n")
+cat("  Total DMLs:", nrow(dmls_strict), "\n")
+cat("  Total DMRs:", nrow(dmrs_strict), "\n")
+cat("    Hypermethylated:", nrow(dmrs_strict_hyper), "\n")
+cat("    Hypomethylated:", nrow(dmrs_strict_hypo), "\n")
+
+```
+
+## Save DML and DMR results to files
+
+"STRICT" files apply a more conservative threshold (delta = 0.1, pct.sig < 0.9, etc.) and are more likely to be actual DMRs. Regular DMRs (detected using p < 0.01 only) may include less accurate or noisy sites.
 
 ```{r}
 options(scipen=999) # to prevent scientific notation on tables
@@ -208,7 +229,7 @@ prefix <- paste0("HG38_", today, "_", toupper(test_name), "_VS_", toupper(ref_na
 dmr_file_strict <- paste0(prefix, "_DMRs_STRICT.bed")
 dmr_file <- paste0(prefix, "_DMRs.bed")
 dml_file <- paste0(prefix, "_DMLs_ALL.bed")
-# Additional hyp/hyper output files
+# Additional hypo/hyper output files
 dmr_file_strict_hyper <- paste0(prefix, "_DMRs_STRICT_HYPER.bed")
 dmr_file_strict_hypo  <- paste0(prefix, "_DMRs_STRICT_HYPO.bed")
 
@@ -221,7 +242,7 @@ write.table(dmrs_strict[, c("chr", "start", "end", "name")],
             file = dmr_file_strict,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
-write.table(dmls_strict[, c("chr", "pos", "pos")],
+write.table(dmls_strict[, c("chr", "pos", "end")],
             file = dml_file,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
@@ -240,8 +261,9 @@ cat("Saving strict DMRs to:", dmr_file_strict, "\n")
 
 cat("Saving strict hyper DMRs to:", dmr_file_strict_hyper, "\n")
 cat("Saving strict hypo DMRs to:", dmr_file_strict_hypo, "\n")
-```
+cat("Done.")
 
+```
 
 ## Session Info
 
