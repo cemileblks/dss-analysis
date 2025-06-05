@@ -157,6 +157,66 @@ dmrs_strict$chr <- factor(dmrs_strict$chr, levels = canon_chrs)
 dmrs_strict <- dmrs_strict[order(dmrs_strict$chr, dmrs_strict$start), ]
 head(dmrs_strict)
 ```
+## Comparative Visualisation of DMRs
+
+```{r}
+# Function adapted from https://www.geeksforgeeks.org/outlier-analysis-in-r/
+# to identify outliers using the IQR method
+detect_outlier <- function(x) {
+
+  Quantile1 <- quantile(x, probs=.25)
+  Quantile3 <- quantile(x, probs=.75)
+  
+  IQR = Quantile3-Quantile1
+  
+  x > Quantile3 + (IQR*1.5) | x < Quantile1 - (IQR*1.5)
+}
+
+# Count the number of outliers in DMR length and CpG count for both sets
+sum(detect_outlier(dmrs$length))
+# [1] 30319
+sum(detect_outlier(dmrs_strict$length))
+# [1] 18626
+sum(detect_outlier(dmrs$nCG))
+# [1] 28528
+sum(detect_outlier(dmrs_strict$nCG))
+# [1] 15514
+
+# Summary statistics to check the distributions
+summary(dmrs$length)
+summary(dmrs_strict$length)
+summary(dmrs$nCG)
+summary(dmrs_strict$nCG)
+
+# Scatter plots: DMR length vs CpG count
+par(mfrow=c(1,2))
+plot(dmrs$length, dmrs$nCG, 
+     xlab="Length (bp)", ylab="Number of CpG sites", 
+     main="Loose DMRs:\nLength vs CpG Count", ylim = c(0, 500), xlim = c(0, 30000),
+     pch=16, col=rgb(0,0,1,0.5), cex=0.7)
+
+plot(dmrs_strict$length, dmrs_strict$nCG, 
+     xlab="Length (bp)", ylab="Number of CpG sites", 
+     main="Strict DMRs:\nLength vs CpG Count", ylim = c(0, 500), xlim = c(0, 30000),
+     pch=16, col=rgb(1,0,0,0.5), cex=0.7)
+
+# Boxplots to compare DMR length and CpG count distributions
+boxplot(dmrs$length, dmrs_strict$length, names=c("Loose", "Strict"),
+        main="DMR Lengths", ylab="Length (bp)", col=c("skyblue", "tomato"))
+
+boxplot(dmrs$nCG, dmrs_strict$nCG, names=c("Loose", "Strict"),
+        main="CpG Sites per DMR", ylab="CpG Count", col=c("lightgreen", "orange"))
+
+# Boxplots without outliers for a clearer look at the core distribution
+boxplot(dmrs$length, dmrs_strict$length, 
+        names=c("Loose", "Strict"), 
+        main="DMR Lengths", ylab="Length (bp)", outline=FALSE, col=c("skyblue", "tomato"))
+
+boxplot(dmrs$nCG, dmrs_strict$nCG, 
+        names=c("Loose", "Strict"), 
+        main="CpG Count per DMR", ylab="# CpG sites",outline=FALSE, col=c("lightgreen", "orange"))
+
+```
 ### Assign unique identifiers to each DMR
 
 Each DMR is assigned a descriptive name to help track and label them in IGV and downstream analysis.
