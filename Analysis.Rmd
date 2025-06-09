@@ -242,8 +242,8 @@ The DMRs are split into hypermethylated and hypomethylated groups based on the d
 
 ```{r sort-dmrs}
 # based on the direction of methylation change (diff.Methy):
-#   - Negative = hyper in reference (WT), hypo in test (3BKO)
-#   - Positive = hypo in reference (WT), hyper in test (3BKO)
+#   - Negative = hypermethylation in tested group
+#   - Positive = hypomethylation in tested group
 
 dmrs_strict_hyper <- subset(dmrs_strict, diff.Methy < 0)
 dmrs_strict_hypo  <- subset(dmrs_strict, diff.Methy > 0)
