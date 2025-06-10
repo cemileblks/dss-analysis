@@ -135,11 +135,11 @@ head(dmrs)
 # Call stricter DMRs using both p-value and effect size thresholds
 dmrs_strict <- callDMR(dmlTest.sm, 
                        delta = 0.1,         # minimum methylation difference (default: 0)
-                       p.threshold = 0.01,  # significance threshold (default: 1e-5)
+                       p.threshold = 0.05,  # significance threshold (default: 1e-5)
                        minlen = 50,         # minimum DMR length in bp (default: 50)
                        minCG = 3,           # minimum number of CpGs per DMR (default: 3)
                        dis.merge = 50,      # merge DMRs closer than this (default: 50 bps)
-                       pct.sig = 0.9)       # % of significant CpGs required (default: 0.5)
+                       pct.sig = 0.5)       # % of significant CpGs required (default: 0.5)
 head(dmrs_strict)
 
 # Visualise an example DMR
@@ -227,7 +227,8 @@ test_label <- "HCT116_3BKO"
 
 # Create DMR names for the non-strict DMR set
 dmr_id_prefix <- paste0(test_label, "_DSS_DMR")
-dmrs$name <- paste0(dmr_id_prefix, "_", seq_len(nrow(dmrs)), "_", toupper(dmrs$chr))
+dmrs$DMR_ID <- seq_len(nrow(dmrs))
+dmrs$name <- paste0(dmr_id_prefix, "_", dmrs$DMR_ID, "_", toupper(dmrs$chr))
 
 # Create DMR names and numeric IDs for the strict DMR set
 dmr_strict_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT")
@@ -245,10 +246,21 @@ The DMRs are split into hypermethylated and hypomethylated groups based on the d
 #   - Negative = hypermethylation in tested group
 #   - Positive = hypomethylation in tested group
 
+dmrs_hyper <- subset(dmrs, diff.Methy < 0)
+dmrs_hypo <- subset(dmrs, diff.Methy > 0)
+
+dmrs_hyper_id_prefix <- paste0(test_label, "_DSS_DMR_HYPER")
+dmrs_hypo_id_prefix <- paste0(test_label, "_DSS_DMR_HYPO")
+
+dmrs_hyper$name <- sub("DMR_", "DMR_HYPER_", dmrs_hyper$name)
+dmrs_hypo$name  <- sub("DMR_", "DMR_HYPO_", dmrs_hypo$name)
+
+# ------------------------
+
 dmrs_strict_hyper <- subset(dmrs_strict, diff.Methy < 0)
 dmrs_strict_hypo  <- subset(dmrs_strict, diff.Methy > 0)
 
-dmr_strict_hyper_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT_HYPER")
+dmrs_strict_hyper_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT_HYPER")
 dmrs_strict_hypo_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT_HYPO")
 
 # Update DMR names to include methylation direction
@@ -262,15 +274,18 @@ dmrs_strict_hypo$name  <- sub("DMR_STRICT_", "DMR_STRICT_HYPO_", dmrs_strict_hyp
 ```{r}
 cat("Output Summary:\n")
 cat("  Total DMLs:", nrow(dmls_strict), "\n")
-cat("  Total DMRs:", nrow(dmrs_strict), "\n")
-cat("    Hypermethylated:", nrow(dmrs_strict_hyper), "\n")
-cat("    Hypomethylated:", nrow(dmrs_strict_hypo), "\n")
+cat("  Total DMRs:", nrow(dmrs), "\n")
+cat("    Hypermethylated:", nrow(dmrs_hyper), "\n")
+cat("    Hypomethylated:", nrow(dmrs_hypo), "\n")
+cat("  Total Strict DMRs:", nrow(dmrs_strict), "\n")
+cat("    Strict hypermethylated:", nrow(dmrs_strict_hyper), "\n")
+cat("    Strict hypomethylated:", nrow(dmrs_strict_hypo), "\n")
 
 ```
 
 ## Save DML and DMR results to files
 
-"STRICT" files apply a more conservative threshold (delta = 0.1, pct.sig < 0.9, etc.) and are more likely to be actual DMRs. Regular DMRs (detected using p < 0.01 only) may include less accurate or noisy sites.
+"STRICT" files apply a more conservative threshold (delta = 0.1, p < 0.05, etc.) and are more likely to be actual DMRs. Regular DMRs (detected using p < 0.01 only) may include less accurate or noisy sites.
 
 ```{r}
 options(scipen=999) # to prevent scientific notation on tables
@@ -286,24 +301,35 @@ test_name <- tools::file_path_sans_ext(test_name, compression = TRUE)
 # Create file prefix
 prefix <- paste0("HG38_", today, "_", toupper(test_name), "_VS_", toupper(ref_name))
 
-dmr_file_strict <- paste0(prefix, "_DMRs_STRICT.bed")
-dmr_file <- paste0(prefix, "_DMRs.bed")
 dml_file <- paste0(prefix, "_DMLs_ALL.bed")
+dmr_file <- paste0(prefix, "_DMRs.bed")
+dmr_file_strict <- paste0(prefix, "_DMRs_STRICT.bed")
+
 # Additional hypo/hyper output files
+dmr_file_hyper <- paste0(prefix, "_DMRs_HYPER.bed")
+dmr_file_hypo  <- paste0(prefix, "_DMRs_HYPO.bed")
 dmr_file_strict_hyper <- paste0(prefix, "_DMRs_STRICT_HYPER.bed")
 dmr_file_strict_hypo  <- paste0(prefix, "_DMRs_STRICT_HYPO.bed")
 
 # Write results to files
+write.table(dmls_strict[, c("chr", "pos", "end")],
+            file = dml_file,
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
 write.table(dmrs[, c("chr", "start", "end", "name")],
             file = dmr_file,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
-write.table(dmrs_strict[, c("chr", "start", "end", "name")],
-            file = dmr_file_strict,
+write.table(dmrs_hyper[, c("chr", "start", "end", "name")],
+            file = dmr_file_hyper,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
-write.table(dmls_strict[, c("chr", "pos", "end")],
-            file = dml_file,
+write.table(dmrs_hypo[, c("chr", "start", "end", "name")],
+            file = dmr_file_hypo,
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+write.table(dmrs_strict[, c("chr", "start", "end", "name")],
+            file = dmr_file_strict,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
 write.table(dmrs_strict_hyper[, c("chr", "start", "end", "name")],
@@ -317,8 +343,10 @@ write.table(dmrs_strict_hypo[, c("chr", "start", "end", "name")],
 # Outputs
 cat("Saving DMLs to:", dml_file, "\n")
 cat("Saving DMRs to:", dmr_file, "\n")
-cat("Saving strict DMRs to:", dmr_file_strict, "\n")
+cat("Saving hyper DMRs to:", dmr_file_hyper, "\n")
+cat("Saving hypo DMRs to:", dmr_file_hypo, "\n")
 
+cat("Saving strict DMRs to:", dmr_file_strict, "\n")
 cat("Saving strict hyper DMRs to:", dmr_file_strict_hyper, "\n")
 cat("Saving strict hypo DMRs to:", dmr_file_strict_hypo, "\n")
 cat("Done.")
