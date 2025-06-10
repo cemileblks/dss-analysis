@@ -2,10 +2,10 @@
 
 # -----------------------------------------------------------------------------
 # Script: tidy_dssin.sh
-# Purpose: Filter DSS input files to retain only canonical chromosomes (chr1–chr22)
+# Purpose: Filter DSS input files to retain only autosomal canonical chromosomes (chr1–chr22)
 # Usage: ./tidy_dssin.sh <input_file>.dssin.gz
 # Input: A .dssin.gz file (4-column gzipped DSS input: chr, pos, N, X)
-# Output: A gzipped file <input_file>.tidy.dssin.gz containing only chr1 to chr22
+# Output: A gzipped file <input_file>_tidy.dssin.gz containing only chr1 to chr22
 #
 # Notes:
 #   - This removes random contigs (e.g., chr1_KI...) and non autosomal chromosomes (chrX, chrY, chrM)
@@ -27,7 +27,7 @@ if [[ "$INPUT_FILE" != *.dssin.gz ]]; then
   exit 1
 fi
 
-OUTFILE="${INPUT_FILE%.dssin.gz}.tidy.dssin.gz"
+OUTFILE="${INPUT_FILE%.dssin.gz}_tidy.dssin.gz"
 
 echo "Processing: $INPUT_FILE"
 echo "Output will be: $OUTFILE"
