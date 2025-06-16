@@ -107,9 +107,10 @@ head(dmlTest.sm)
 With the test results, the callDML function was called. The results are DMLs are sorted by their significance.
 
 ```{r}
+options(scipen = 0)
 # Null hypothesis: the diff. in methylation levels is 0 between groups (mu1 = mu2)
 # No minimum effect size required
-dmls <- callDML(dmlTest.sm, p.threshold = 0.001)
+dmls <- callDML(dmlTest.sm, delta = 0, p.threshold = 0.001)
 head(dmls)
 
 # Null hypothesis: the difference in methylation is less than or equal to delta (|mu1 - mu2| ≤ 0.1)
@@ -118,15 +119,372 @@ dmls_strict <- callDML(dmlTest.sm, delta = 0.1, p.threshold = 0.001)
 head(dmls_strict)
 
 # For DMLs add +2 to cover the whole CpG site as the locus
-dmls_strict$end <- dmls$pos + 2
+dmls_strict$end <- dmls_strict$pos + 2
+dmls$end <- dmls$pos + 2
+```
+
+## Lets make some loops
+
+```{r}
+# Parameter grid
+# params <- data.frame(
+#   p = c(0.05, 0.01, 0.01, 0.01, 0.005, 0.001, 0.001, 0.001, 0.0005),
+#   delta = c(0.1, 0, 0.05, 0.1, 0.1, 0, 0.1, 0.2, 0.2)
+# )
+# 
+params2 <- data.frame(
+  p = c(0.05, 0.05, 0.05, 0.05, 0.01, 0.005, 0.005, 0.005, 0.001),
+  delta = c(0, 0.1, 0.2, 0.05, 0.2, 0, 0.2, 0.05, 0.05)
+)
+
+params3 <- data.frame(
+  p = c(0.0005, 0.0005, 0.0005),
+  delta = c(0, 0.1, 0.05)
+)
+
+params4 <- expand.grid(
+  p = c(0.05, 0.01, 0.005, 0.001, 0.0005),
+  delta = c(0, 0.1, 0.2, 0.05)
+)
+
+# results <- data.frame()
+
+# Add a list to store DMR objects
+# dmr_list <- list()
+
+for (i in 1:nrow(params3)) {
+  pval <- params3$p[i]
+  delta <- params3$delta[i]
+  name <- paste0("p", pval, "_d", delta)
+  cat("Currently working on pvalue =", pval, "and delta =", delta, "\n")
+  
+  # DML detection
+  dml <- callDML(dmlTest.sm, p.threshold = pval, delta = delta)
+  n_dml <- nrow(dml)
+  
+  # DMR detection
+  dmr <- callDMR(dmlTest.sm, p.threshold = pval, delta = delta)
+  n_dmr <- nrow(dmr)
+
+  # Store the DMR object
+  dmr_list[[name]] <- dmr
+  
+  # Count hyper/hypo DMRs
+  n_hyper <- sum(dmr$diff.Methy < 0)
+  n_hypo <- sum(dmr$diff.Methy > 0)
+  
+  # Save summary
+  results <- rbind(
+    results,
+    data.frame(
+      name = name,
+      pval = pval,
+      delta = delta,
+      DMLs = n_dml,
+      DMRs = n_dmr,
+      hyper = n_hyper,
+      hypo = n_hypo
+    )
+  )
+}
 
 ```
+
+
+
+```{r}
+dml_list <- list()
+
+for (i in 1:nrow(params4)) {
+  pval <- params4$p[i]
+  delta <- params4$delta[i]
+  name <- paste0("p", pval, "_d", delta)
+  cat("Currently working on pvalue =", pval, "and delta =", delta, "\n")
+
+  dml <- callDML(dmlTest.sm, p.threshold = pval, delta = delta)
+  dml_list[[name]] <- dml
+}
+
+```
+```{r}
+library(reshape2)
+library(ggplot2)
+
+# Extract FDRs and convert to percentage
+fdr_list <- lapply(dml_list, function(df) 100 * df$fdr)
+
+# Combine to long data frame
+fdr_df <- melt(fdr_list)
+colnames(fdr_df) <- c("FDR_percent", "Threshold")
+
+# Optional: make threshold a factor with custom order
+fdr_df$Threshold <- factor(fdr_df$Threshold, levels = names(dml_list))
+
+# Plot
+ggplot(fdr_df, aes(x = Threshold, y = FDR_percent)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(
+    title = "FDR (%) Distribution per DML Detection Threshold",
+    x = "Threshold setting (p + delta)",
+    y = "FDR (%)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+```{r}
+results$pval <- as.numeric(as.character(results$pval))
+
+# Total number of CpG tests (from your BSseq object)
+total_cpgs <- nrow(dmlTest.sm)  # e.g., 27145793
+
+# Create new columns to store estimated FP and FDR
+results$Estimated_FP <- NA
+results$Estimated_FDR <- NA
+
+# Calculate only for delta = 0 (classical null)
+for (i in 1:nrow(results)) {
+  if (results$delta[i] == 0) {
+    pval_thresh <- results$pval[i]
+    num_dmls <- results$DMLs[i]
+    
+    est_fp <- pval_thresh * total_cpgs
+    est_fdr <- est_fp / num_dmls
+    
+    results$Estimated_FP[i] <- est_fp
+    results$Estimated_FDR[i] <- est_fdr
+  }
+}
+
+# Filter to only thresholds with delta = 0
+fdr_est_df <- subset(results, delta == 0)
+
+ggplot(fdr_est_df, aes(x = name, y = Estimated_FDR * 100)) +
+  geom_bar(stat = "identity", fill = "tomato") +
+  labs(
+    title = "Estimated False Discovery Rate (%) at Each Threshold",
+    x = "Threshold (p only)",
+    y = "Estimated FDR (%)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+# line plots
+
+```{r}
+library(ggplot2)
+results$pval <- as.numeric(as.character(results$pval))
+results$pval_factor <- factor(results$pval)
+results$delta <- as.factor(results$delta)
+
+ggplot(data = results, aes(x = -log10(pval), y = log10(DMLs), group = delta)) +
+  geom_line(aes(color = delta), linewidth = 0.8) +
+  geom_point(aes(color = delta, shape = pval_factor), size = 2.6) +
+  scale_color_brewer(palette = "Paired") +
+  labs(
+    title = "DML Count by p-value and delta threshold",
+    x = expression(-log[10](p~value)),
+    y = expression(log[10](Number~of~DMLs)),
+    color = "Delta threshold",
+    shape = "p-value threshold"
+  )
+
+results$delta <- as.numeric(as.character(results$delta))
+results$pval <- as.factor(results$pval)
+ggplot(data = results, aes(x = delta, y = log10(DMLs), group = pval)) +
+  geom_line(aes(color = pval), linewidth = 0.8) +
+  geom_point(aes(color = pval), size = 2.6) +
+  scale_color_brewer(palette = "Set1") +
+  labs(
+    title = "DML Count across delta thresholds (grouped by p-value)",
+    x = expression(Delta),
+    y = expression(log[10](Number~of~DMLs)),
+    color = expression(p~value),
+  )
+```
+# FDR for pvalue thresholds of DMLs
+
+```{r}
+
+
+```
+
+
+
+# Dmr line plots
+```{r}
+
+results$pval <- as.numeric(as.character(results$pval))
+results$pval_factor <- factor(results$pval)
+results$delta <- as.factor(results$delta)
+
+ggplot(data = results, aes(x = -log10(pval), y = log10(DMRs), group = delta)) +
+  geom_line(aes(color = delta), linewidth = 0.8) +
+  geom_point(aes(color = delta, shape = pval_factor), size = 2.6) +
+  scale_color_brewer(palette = "Paired") +
+  labs(
+    title = "DMR Count by p-value and delta threshold",
+    x = expression(-log[10](p~value)),
+    y = expression(log[10](Number~of~DMRs)),
+    color = "Delta threshold",
+    shape = "p-value threshold"
+  )
+
+results$delta <- as.numeric(as.character(results$delta))
+results$pval <- as.factor(results$pval)
+ggplot(data = results, aes(x = delta, y = log10(DMRs), group = pval)) +
+  geom_line(aes(color = pval), linewidth = 0.8) +
+  geom_point(aes(color = pval), size = 2.6) +
+  scale_color_brewer(palette = "Set1") +
+  labs(
+    title = "DMR Count across delta thresholds (grouped by p-value)",
+    x = expression(Delta),
+    y = expression(log[10](Number~of~DMRs)),
+    color = expression(p~value),
+  )
+```
+
+
+# boxplots
+```{r}
+options(scipen=999)
+bp <- barplot(
+  results$DMLs,
+  names.arg = results$name,
+  col = "skyblue",
+  las = 2,
+  main = "Number of DMLs for Each Parameter Setting",
+  ylab = "Number of DMLs",
+  xlab = "",
+  cex.names = 0.8
+)
+
+text(x = bp, y = results$DMLs, label = results$DMLs, pos = 3, cex = 0.7)
+
+bp2 <- barplot(
+  results$DMRs,
+  names.arg = results$name,
+  col = "salmon",
+  las = 2,
+  main = "Number of DMRs for Each Parameter Setting",
+  ylab = "Number of DMRs",
+  xlab = "",
+  cex.names = 0.8
+)
+
+text(x = bp2, y = results$DMRs, label = results$DMRs, pos = 3, cex = 0.7)
+
+# Get the names of all parameter combos
+param_names <- names(dmr_list)
+
+# Prepare length and nCG data for each setting
+lengths_list <- lapply(dmr_list, function(d) log10(d$length))
+ncg_list <- lapply(dmr_list, function(d) log10(d$nCG))
+
+# Set up plotting area (side-by-side)
+par(mfrow = c(1, 2), mar = c(9, 4, 4, 2))  # Extra bottom margin for labels
+
+# Boxplot for log10(DMR lengths)
+boxplot(lengths_list,
+        names = param_names,
+        las = 2,
+        col = "skyblue",
+        main = "DMR Lengths (log10 scale)",
+        ylab = "log10 Length (bp)",
+        cex.axis = 0.7)
+
+# Boxplot for log10(CpG counts)
+boxplot(ncg_list,
+        names = param_names,
+        las = 2,
+        col = "tomato",
+        main = "CpG Sites per DMR (log10 scale)",
+        ylab = "log10 CpG Count",
+        cex.axis = 0.7)
+
+# Reset plotting layout
+par(mfrow = c(1,1)) 
+```
+# Boxplots without outliers
+
+```{r}
+# Get the names of all parameter combos
+param_names <- names(dmr_list)
+
+# Prepare length and nCG data for each setting
+lengths_list <- lapply(dmr_list, function(d) d$length)
+ncg_list <- lapply(dmr_list, function(d) d$nCG)
+
+# Set up plotting area (side-by-side)
+par(mfrow = c(1, 2), mar = c(9, 4, 4, 2))  # Extra bottom margin for labels
+
+# Boxplot for log10(DMR lengths)
+boxplot(lengths_list,
+        names = param_names,
+        las = 2,
+        outline = FALSE,
+        col = "skyblue",
+        main = "DMR Lengths (log10 scale)",
+        ylab = "log10 Length (bp)",
+        cex.axis = 0.7)
+
+# Boxplot for log10(CpG counts)
+boxplot(ncg_list,
+        names = param_names,
+        las = 2,
+        outline = FALSE,
+        col = "tomato",
+        main = "CpG Sites per DMR (log10 scale)",
+        ylab = "log10 CpG Count",
+        cex.axis = 0.7)
+
+# Reset plotting layout
+par(mfrow = c(1,1))
+```
+
+## Fold changes
+
+```{r}
+# Find the reference values
+ref_dmls <- results$DMLs[results$pval == 0.001 & results$delta == 0.1]
+ref_dmrs <- results$DMRs[results$pval == 0.05 & results$delta == 0.1]
+
+# Add new columns for fold change relative to reference
+results$dmls_vs_ref <- round(results$DMLs / ref_dmls, 2)
+results$dmrs_vs_ref <- round(results$DMRs / ref_dmrs, 2)
+
+# Plot DML fold-change
+barplot(results$dmls_vs_ref,
+        names.arg = results$name,
+        col = "skyblue",
+        las = 2,
+        main = "Fold Change in DMLs vs Reference (p=0.001, d=0.1)",
+        ylab = "Fold Change",
+        xlab = "",
+        cex.names = 0.8)
+
+# Plot DMR fold-change
+barplot(results$dmrs_vs_ref,
+        names.arg = results$name,
+        col = "salmon",
+        las = 2,
+        main = "Fold Change in DMRs vs Reference (p=0.01, d=0.1)",
+        ylab = "Fold Change",
+        xlab = "",
+        cex.names = 0.8)
+
+```
+
 
 ## Identify DMRs by grouping nearby significant CpGs (DMLs)
 
 After the identification of differentially methylated loci (DMLs), differentially methylated regions (DMRs) are identified. The callDMR() function from DSS was used. Regions are identified based on significance thresholds for both statistical confidence (p-value) and the magnitude of methylation difference (delta). This step summarises regional methylation patterns than just the single loci differences.
 
 ```{r dmr-call}
+options(scipen = 0)
 # Detect DMRs based on smoothed DML test results
 # Call DMRs using p-value threshold only (no effect size filter)
 dmrs = callDMR(dmlTest.sm, p.threshold=0.01)
@@ -149,11 +507,13 @@ showOneDMR(dmrs_strict[1,], BSobj)
 dmrs$end <- dmrs$end + 2
 dmrs_strict$end <- dmrs_strict$end + 2
 
-# Sort strict DMRs by chromosome and start position
+# Sort DMRs by chromosome and start position
 # Set chromosome column as a factor with canonical order
+dmrs$chr <- factor(dmrs$chr, levels = canon_chrs)
 dmrs_strict$chr <- factor(dmrs_strict$chr, levels = canon_chrs)
 
 # Order by chromosomes (with factor level order) and then by start position
+dmrs <- dmrs[order(dmrs$chr, dmrs$start), ]
 dmrs_strict <- dmrs_strict[order(dmrs_strict$chr, dmrs_strict$start), ]
 head(dmrs_strict)
 ```
@@ -206,6 +566,21 @@ boxplot(dmrs$length, dmrs_strict$length, names=c("Loose", "Strict"),
 
 boxplot(dmrs$nCG, dmrs_strict$nCG, names=c("Loose", "Strict"),
         main="CpG Sites per DMR", ylab="CpG Count", col=c("lightgreen", "orange"))
+
+# log 10 scale 
+# Log10 boxplot for DMR lengths
+boxplot(log10(dmrs$length), log10(dmrs_strict$length),
+        names = c("Loose", "Strict"),
+        main = "DMR Lengths (log10 scale)",
+        ylab = "log10 Length (bp)",
+        col = c("skyblue", "tomato"))
+
+# Log10 boxplot for CpG counts
+boxplot(log10(dmrs$nCG), log10(dmrs_strict$nCG),
+        names = c("Loose", "Strict"),
+        main = "CpG Sites per DMR (log10 scale)",
+        ylab = "log10 CpG Count",
+        col = c("lightgreen", "orange"))
 
 # Boxplots without outliers for a clearer look at the core distribution
 boxplot(dmrs$length, dmrs_strict$length, 
@@ -273,7 +648,8 @@ dmrs_strict_hypo$name  <- sub("DMR_STRICT_", "DMR_STRICT_HYPO_", dmrs_strict_hyp
 
 ```{r}
 cat("Output Summary:\n")
-cat("  Total DMLs:", nrow(dmls_strict), "\n")
+cat("  Total DMLs:", nrow(dmls), "\n")
+cat("  Total DMLs w delta:", nrow(dmls_strict), "\n")
 cat("  Total DMRs:", nrow(dmrs), "\n")
 cat("    Hypermethylated:", nrow(dmrs_hyper), "\n")
 cat("    Hypomethylated:", nrow(dmrs_hypo), "\n")
@@ -301,7 +677,8 @@ test_name <- tools::file_path_sans_ext(test_name, compression = TRUE)
 # Create file prefix
 prefix <- paste0("HG38_", today, "_", toupper(test_name), "_VS_", toupper(ref_name))
 
-dml_file <- paste0(prefix, "_DMLs_ALL.bed")
+dml_file <- paste0(prefix, "_DMLs.bed")
+dml_file2 <- paste0(prefix, "_DMLs_inc_DELTA.bed")
 dmr_file <- paste0(prefix, "_DMRs.bed")
 dmr_file_strict <- paste0(prefix, "_DMRs_STRICT.bed")
 
@@ -312,8 +689,12 @@ dmr_file_strict_hyper <- paste0(prefix, "_DMRs_STRICT_HYPER.bed")
 dmr_file_strict_hypo  <- paste0(prefix, "_DMRs_STRICT_HYPO.bed")
 
 # Write results to files
-write.table(dmls_strict[, c("chr", "pos", "end")],
+write.table(dmls[, c("chr", "pos", "end")],
             file = dml_file,
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+write.table(dmls_strict[, c("chr", "pos", "end")],
+            file = dml_file2,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
 write.table(dmrs[, c("chr", "start", "end", "name")],
@@ -342,6 +723,7 @@ write.table(dmrs_strict_hypo[, c("chr", "start", "end", "name")],
 
 # Outputs
 cat("Saving DMLs to:", dml_file, "\n")
+cat("Saving DMLs with delta to:", dml_file2, "\n")
 cat("Saving DMRs to:", dmr_file, "\n")
 cat("Saving hyper DMRs to:", dmr_file_hyper, "\n")
 cat("Saving hypo DMRs to:", dmr_file_hypo, "\n")
