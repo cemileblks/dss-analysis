@@ -123,25 +123,10 @@ dmls_strict$end <- dmls_strict$pos + 2
 dmls$end <- dmls$pos + 2
 ```
 
-## Lets make some loops
+## Comparison p value and delta
 
 ```{r}
 # Parameter grid
-# params <- data.frame(
-#   p = c(0.05, 0.01, 0.01, 0.01, 0.005, 0.001, 0.001, 0.001, 0.0005),
-#   delta = c(0.1, 0, 0.05, 0.1, 0.1, 0, 0.1, 0.2, 0.2)
-# )
-# 
-params2 <- data.frame(
-  p = c(0.05, 0.05, 0.05, 0.05, 0.01, 0.005, 0.005, 0.005, 0.001),
-  delta = c(0, 0.1, 0.2, 0.05, 0.2, 0, 0.2, 0.05, 0.05)
-)
-
-params3 <- data.frame(
-  p = c(0.0005, 0.0005, 0.0005),
-  delta = c(0, 0.1, 0.05)
-)
-
 params4 <- expand.grid(
   p = c(0.05, 0.01, 0.005, 0.001, 0.0005),
   delta = c(0, 0.1, 0.2, 0.05)
@@ -149,18 +134,22 @@ params4 <- expand.grid(
 
 # results <- data.frame()
 
-# Add a list to store DMR objects
+# Add a list to store dml and dmr objects
+# dml_list <- list()
 # dmr_list <- list()
 
-for (i in 1:nrow(params3)) {
-  pval <- params3$p[i]
-  delta <- params3$delta[i]
+for (i in 1:nrow(params4)) {
+  pval <- params4$p[i]
+  delta <- params4$delta[i]
   name <- paste0("p", pval, "_d", delta)
   cat("Currently working on pvalue =", pval, "and delta =", delta, "\n")
   
   # DML detection
   dml <- callDML(dmlTest.sm, p.threshold = pval, delta = delta)
   n_dml <- nrow(dml)
+  
+  # Store the DML object
+  dml_list[[name]] <- dml
   
   # DMR detection
   dmr <- callDMR(dmlTest.sm, p.threshold = pval, delta = delta)
@@ -190,55 +179,14 @@ for (i in 1:nrow(params3)) {
 
 ```
 
-
-
-```{r}
-dml_list <- list()
-
-for (i in 1:nrow(params4)) {
-  pval <- params4$p[i]
-  delta <- params4$delta[i]
-  name <- paste0("p", pval, "_d", delta)
-  cat("Currently working on pvalue =", pval, "and delta =", delta, "\n")
-
-  dml <- callDML(dmlTest.sm, p.threshold = pval, delta = delta)
-  dml_list[[name]] <- dml
-}
-
-```
-```{r}
-library(reshape2)
-library(ggplot2)
-
-# Extract FDRs and convert to percentage
-fdr_list <- lapply(dml_list, function(df) 100 * df$fdr)
-
-# Combine to long data frame
-fdr_df <- melt(fdr_list)
-colnames(fdr_df) <- c("FDR_percent", "Threshold")
-
-# Optional: make threshold a factor with custom order
-fdr_df$Threshold <- factor(fdr_df$Threshold, levels = names(dml_list))
-
-# Plot
-ggplot(fdr_df, aes(x = Threshold, y = FDR_percent)) +
-  geom_boxplot(fill = "lightblue") +
-  labs(
-    title = "FDR (%) Distribution per DML Detection Threshold",
-    x = "Threshold setting (p + delta)",
-    y = "FDR (%)"
-  ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-```
+## FDR estimates for threholds without delta
 ```{r}
 results$pval <- as.numeric(as.character(results$pval))
 
-# Total number of CpG tests (from your BSseq object)
-total_cpgs <- nrow(dmlTest.sm)  # e.g., 27145793
+# Total number of CpG tests
+total_cpgs <- nrow(dmlTest.sm)  # e.g. 27145793
 
-# Create new columns to store estimated FP and FDR
+# new columns to store estimated FP and FDR
 results$Estimated_FP <- NA
 results$Estimated_FDR <- NA
 
@@ -255,12 +203,12 @@ for (i in 1:nrow(results)) {
     results$Estimated_FDR[i] <- est_fdr
   }
 }
-
 # Filter to only thresholds with delta = 0
 fdr_est_df <- subset(results, delta == 0)
 
 ggplot(fdr_est_df, aes(x = name, y = Estimated_FDR * 100)) +
-  geom_bar(stat = "identity", fill = "tomato") +
+  geom_bar(stat = "identity", fill = "deeppink3") +
+  geom_text(aes(label = paste0(round(Estimated_FDR * 100, 2), " %")), vjust = -0.3) +
   labs(
     title = "Estimated False Discovery Rate (%) at Each Threshold",
     x = "Threshold (p only)",
@@ -269,10 +217,11 @@ ggplot(fdr_est_df, aes(x = name, y = Estimated_FDR * 100)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+
 ```
 
 
-# line plots
+## DML line plot threshold comparison
 
 ```{r}
 library(ggplot2)
@@ -305,16 +254,9 @@ ggplot(data = results, aes(x = delta, y = log10(DMLs), group = pval)) +
     color = expression(p~value),
   )
 ```
-# FDR for pvalue thresholds of DMLs
 
-```{r}
+## DMR line plot threshold comparison
 
-
-```
-
-
-
-# Dmr line plots
 ```{r}
 
 results$pval <- as.numeric(as.character(results$pval))
@@ -347,8 +289,7 @@ ggplot(data = results, aes(x = delta, y = log10(DMRs), group = pval)) +
   )
 ```
 
-
-# boxplots
+## boxplots
 ```{r}
 options(scipen=999)
 bp <- barplot(
@@ -408,8 +349,8 @@ boxplot(ncg_list,
 # Reset plotting layout
 par(mfrow = c(1,1)) 
 ```
-# Boxplots without outliers
 
+## Boxplots without outliers
 ```{r}
 # Get the names of all parameter combos
 param_names <- names(dmr_list)
@@ -446,7 +387,6 @@ par(mfrow = c(1,1))
 ```
 
 ## Fold changes
-
 ```{r}
 # Find the reference values
 ref_dmls <- results$DMLs[results$pval == 0.001 & results$delta == 0.1]
