@@ -42,4 +42,6 @@ awk 'BEGIN {FS="\t"; OFS="\t"} {print $1, $2, $3+1, $4}' "$BEDGRAPH" | sort -k1,
 # Convert to BigWig
 bedGraphToBigWig "$SORTED_BEDGRAPH" "$CHROMSIZES" "$BIGWIG"
 
+rm $SORTED_BEDGRAPH
+
 echo "Done. BigWig file created: $BIGWIG"
