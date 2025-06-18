@@ -216,6 +216,7 @@ ggplot(fdr_est_df, aes(x = name, y = Estimated_FDR * 100)) +
   ) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave("FDR_rates.jpeg")
 
 
 ```
@@ -240,6 +241,7 @@ ggplot(data = results, aes(x = -log10(pval), y = log10(DMLs), group = delta)) +
     color = "Delta threshold",
     shape = "p-value threshold"
   )
+ggsave("DML_delta_thresholds.png")
 
 results$delta <- as.numeric(as.character(results$delta))
 results$pval <- as.factor(results$pval)
@@ -253,6 +255,8 @@ ggplot(data = results, aes(x = delta, y = log10(DMLs), group = pval)) +
     y = expression(log[10](Number~of~DMLs)),
     color = expression(p~value),
   )
+ggsave("DML_p_thresholds.png")
+
 ```
 
 ## DMR line plot threshold comparison
@@ -274,6 +278,7 @@ ggplot(data = results, aes(x = -log10(pval), y = log10(DMRs), group = delta)) +
     color = "Delta threshold",
     shape = "p-value threshold"
   )
+ggsave("DMR_delta_thresholds.png")
 
 results$delta <- as.numeric(as.character(results$delta))
 results$pval <- as.factor(results$pval)
@@ -287,6 +292,8 @@ ggplot(data = results, aes(x = delta, y = log10(DMRs), group = pval)) +
     y = expression(log[10](Number~of~DMRs)),
     color = expression(p~value),
   )
+ggsave("DMR_p_thresholds.png")
+
 ```
 
 ## boxplots
