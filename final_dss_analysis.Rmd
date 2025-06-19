@@ -10,15 +10,6 @@ params:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-```
-
-## Introduction
-
-This script performs analysis of differentially methylated regions (DMRs) using the DSS package. The input data is from Oxford Nanopore bisulfite sequencing and reformatted to make it compatible for DSS. DSS was chosen due to its accuracy in calling DMRs. 
-
-## Setup
-
-```{r itit}
 # Makes sure the necessary packages are installed before running this document
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
   install.packages("BiocManager")
@@ -30,8 +21,11 @@ if (!requireNamespace("DSS", quietly = TRUE)) {
 # Load required libraries
 library(DSS)
 require(bsseq)
-
 ```
+
+## Introduction
+
+This script performs analysis of differentially methylated regions (DMRs) using the DSS package. The input data is from Oxford Nanopore bisulfite sequencing and reformatted to make it compatible for DSS. DSS was chosen due to its accuracy in calling DMRs. 
 
 ```{r}
 cat("Comparing methylation between:\n")
@@ -89,7 +83,6 @@ dmls$end <- dmls$pos + 2
 
 ```
 
-
 ## Identify DMRs by grouping nearby significant CpGs (DMLs)
 
 After the identification of differentially methylated loci (DMLs), differentially methylated regions (DMRs) are identified. The callDMR() function from DSS was used. Regions are identified based on significance thresholds for both statistical confidence (p-value) and the magnitude of methylation difference (delta). This step summarises regional methylation patterns than just the single loci differences.
@@ -98,7 +91,7 @@ After the identification of differentially methylated loci (DMLs), differentiall
 options(scipen = 0)
 # Detect DMRs based on smoothed DML test results
 # Call DMRs using p-value threshold only (no effect size filter)
-dmrs = callDMR(dmlTest.sm, p.threshold=0.01)
+dmrs = callDMR(dmlTest.sm, delta = 0.1, p.threshold=0.01)
 head(dmrs)
 
 showOneDMR(dmrs_strict[1,], BSobj)
@@ -114,7 +107,6 @@ dmrs$chr <- factor(dmrs$chr, levels = canon_chrs)
 dmrs <- dmrs[order(dmrs$chr, dmrs$start), ]
 ```
 
-
 ### Assign unique identifiers to each DMR
 
 Each DMR is assigned a descriptive name to help track and label them in IGV and downstream analysis.
@@ -125,7 +117,7 @@ ref_name <- tools::file_path_sans_ext(basename(params$input1), compression = TRU
 test_name <- tools::file_path_sans_ext(basename(params$input2), compression = TRUE)
 
 # Define group label for use in DMR names
-test_label <- paste0(ref_name)
+test_label <- paste0(test_name)
 
 # Create DMR names for the non-strict DMR set
 dmr_id_prefix <- paste0(test_label, "_DSS_DMR")
@@ -133,7 +125,6 @@ dmrs$DMR_ID <- seq_len(nrow(dmrs))
 dmrs$name <- paste0(dmr_id_prefix, "_", dmrs$DMR_ID, "_", toupper(dmrs$chr))
 
 ```
-
 
 ### Split strict DMRs by methylation direction
 
@@ -154,7 +145,6 @@ dmrs_hyper$name <- sub("DMR_", "DMR_HYPER_", dmrs_hyper$name)
 dmrs_hypo$name  <- sub("DMR_", "DMR_HYPO_", dmrs_hypo$name)
 
 ```
-
 
 ## Output Summary
 
