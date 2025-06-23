@@ -1,0 +1,227 @@
+---
+title: "finding_overlaps"
+author: "Cemile Balkas"
+date: "2025-06-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Makes sure the necessary packages are installed before running this document
+if (!requireNamespace("BiocManager", quitetly = TRUE)) {
+      install.packages("BiocManager")
+}
+if (!requireNamespace("GenomicRanges", quietly = TRUE)) {
+  BiocManager::install("GenomicRanges")
+}
+
+if (!requireNamespace("TxDb.Hsapiens.UCSC.hg38.knownGene", quietly = TRUE)) {
+  BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")
+}
+if (!requireNamespace("ChIPpeakAnno", quietly = TRUE)) {
+  BiocManager::install("ChIPpeakAnno")
+}
+
+if (!requireNamespace("txdbmaker", quietly = TRUE)) {
+  BiocManager::install("txdbmaker")
+}
+
+if (!requireNamespace("AnnotationDbi", quietly = TRUE)) {
+  BiocManager::install("AnnotationDbi")
+}
+
+library(GenomicRanges)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(GenomicFeatures)
+library(AnnotationDbi)
+library(ChIPpeakAnno)
+library(txdbmaker)
+
+```
+
+## Make GRanges object from input files
+
+```{r}
+# Loading DMRs ----------------------------
+# this converts the bed file to granges object with 1 based format which is correct for R
+diff_meth_regions <- rtracklayer::import("HG38_19_06_2025_HCT116_3BKO_TIDY_VS_HCT116_WT_TIDY_DMRs.bed")
+
+genome(diff_meth_regions) <- "hg38"
+names(diff_meth_regions) <- diff_meth_regions$name
+
+# when you do it this way you have to add 1 to convert it to 1 based
+diff_meth_regions_df <- read.table("HG38_19_06_2025_HCT116_3BKO_TIDY_VS_HCT116_WT_TIDY_DMRs.bed", header = F, sep="\t")
+
+colnames(diff_meth_regions_df) <- c("chr","start", "end", "name")
+
+# Either by this method 
+# diff_meth_regions_df$start <- diff_meth_regions_df$start + 1
+
+# or or setting the starts.in.df.are.0based = TRUE as below:
+diff_meth_regions2 <- GenomicRanges::makeGRangesFromDataFrame(diff_meth_regions_df, seqnames.field = c("chr"), starts.in.df.are.0based = TRUE, keep.extra.columns = TRUE)
+
+genome(diff_meth_regions2) <- "hg38"
+names(diff_meth_regions2) <- diff_meth_regions2$name
+
+# Loading annotation files -------------------
+protein_coding_genes <- rtracklayer::import("data/annotation_data/protein_coding_genes_ordered.bed")
+
+names(protein_coding_genes) <- protein_coding_genes$name
+genome(protein_coding_genes) <- "hg38"
+
+genome_annot <- rtracklayer::import("data/annotation_data/Homo_sapiens.GRCh38.113.gtf")
+genome(genome_annot) <- "hg38"
+
+hg38_txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
+hg38_txdb
+
+txdb2 <- txdbmaker::makeTxDbFromGFF("data/annotation_data/Homo_sapiens.GRCh38.113.gtf", format = "gtf")
+
+```
+
+## Find overlaps 
+
+```{r}
+# query = DMRs
+# subject = Protein coding genes
+ovf <- findOverlaps(diff_meth_regions, protein_coding_genes)
+
+# This line does the same thing as bedtools:
+# bedtools intersect -a "DMRs" -b "genes" -sorted 
+
+# Total number of protein-coding genes
+length(protein_coding_genes)  # e.g. ~20,116
+
+# Total number of DMRs
+length(diff_meth_regions)     # e.g. ~211,841
+
+# Total number of DMR–gene overlaps (many-to-many mapping)
+length(ovf)                   # e.g. ~79,917
+
+# DMR Summary --------------------
+
+# 1. Number of DMRs that overlap at least one gene
+length(unique(queryHits(ovf)))  # How many DMRs hit ≥1 gene
+
+# 2. Table: for each DMR, how many genes it overlaps (raw)
+dmr_to_gene_counts <- table(queryHits(ovf))
+head(dmr_to_gene_counts, n = 30)
+
+# 3. Distribution: how many genes does each DMR overlap?
+#    e.g. 2,269 DMRs overlap 2 genes, 132 DMRs overlap 3 genes, etc.
+dmr_gene_table <- table(table(queryHits(ovf)))
+print(dmr_gene_table)
+
+# Named data frame of overlapping DMRs and gene names
+if (!is.null(names(diff_meth_regions)) && !is.null(names(protein_coding_genes))) {
+  overlap_df <- data.frame(
+    dmr  = names(diff_meth_regions)[queryHits(ovf)],
+    gene = names(protein_coding_genes)[subjectHits(ovf)]
+  )
+  head(overlap_df, n = 40)
+}
+
+# Gene Summary ------------------
+# 5. Distribution: how many DMRs overlap each gene
+#    e.g., 4,367 genes are overlapped by 1 DMR, 1,800 by 2 DMRs, etc.
+gene_dmr_table <- table(table(subjectHits(ovf)))
+print(gene_dmr_table)
+
+# 6. Table: for each gene, how many DMRs overlap it (raw)
+gene_to_dmr_counts <- table(subjectHits(ovf))
+head(gene_to_dmr_counts)
+
+```
+
+# Partial overlaps
+```{r}
+# Get DMRs and genes from hits
+dmrs_hit <- diff_meth_regions[queryHits(ovf)]
+genes_hit <- protein_coding_genes[subjectHits(ovf)]
+
+# Logical check: DMR starts inside gene but ends outside
+spanning <- start(dmrs_hit) >= start(genes_hit) & end(dmrs_hit) > end(genes_hit) |
+            start(dmrs_hit) < start(genes_hit) & end(dmrs_hit) <= end(genes_hit)
+
+partial_overlap_df <- data.frame(
+  dmr_name  = names(dmrs_hit[spanning]),
+  gene_name = names(genes_hit[spanning]),
+  dmr_start = start(dmrs_hit[spanning]),
+  dmr_end   = end(dmrs_hit[spanning]),
+  gene_start = start(genes_hit[spanning]),
+  gene_end   = end(genes_hit[spanning])
+)
+
+overhanging_dmrs <- dmrs_hit[spanning]
+
+# Optional: see how many such DMRs you have
+length(overhanging_dmrs)
+
+# Step 5: Export to BED
+rtracklayer::export(overhanging_dmrs, "overhanging_dmrs.bed", format = "bed")
+
+```
+
+
+# Genome annotations
+
+```{r}
+# Method 1: Using the UCSC known knownGene ------
+
+# chromosome_region <- assignChromosomeRegion(diff_meth_regions,
+#                                             TxDb = hg38_txdb,
+#                                             nucleotideLevel = FALSE,
+#                                             precedence = c("Promoters",
+#                                                            "immediateDownstream", 
+#                                                            "fiveUTRs", 
+#                                                            "threeUTRs",
+#                                                            "Exons", 
+#                                                            "Introns"))
+
+rotate_x <- function(data, rot_angle) {
+  plt <- barplot(data, 
+                 xaxt = "n",
+                 las = 2,
+                 ylim = c(0, max(data) * 1.2),
+                 main = "DMR distribution across genomic features",
+                 ylab = "Percentage of DMRs",
+                 )
+
+  text(plt, par("usr")[3], 
+       labels = names(data), 
+       srt = rot_angle, adj = c(1.1,1.1), 
+       xpd = TRUE, cex = 0.7)
+  text(plt, data,
+       labels = round(data, 1),  # Round to 1 decimal if you like
+       pos = 3, cex = 0.7)  # pos=3 means above bar
+}
+
+rotate_x(chromosome_region[["percentage"]], 45)
+
+# Method 2: Using Christine's provided regions ---------
+# chromosome_region2 <- assignChromosomeRegion(diff_meth_regions,
+#                                             TxDb = txdb2,
+#                                             nucleotideLevel = FALSE,
+#                                             precedence = c("Promoters",
+#                                                            "immediateDownstream", 
+#                                                            "fiveUTRs", 
+#                                                            "threeUTRs",
+#                                                            "Exons", 
+#                                                            "Introns"))
+# Plot bar graph
+rotate_x(chromosome_region2[["percentage"]], 45)
+
+```
+
+
+```{r}
+genomicElementDistribution(diff_meth_regions,
+                           TxDb = hg38_txdb)
+```
+
+```{r}
+genomicElementDistribution(diff_meth_regions, 
+                           TxDb = txdb2)
+```
+
