@@ -62,8 +62,11 @@ DML test between the two groups is performed using the DMLtest function from the
 ```{r dml-test}
 # Run DML test with smoothing (recommended for WGBS data and when there are no replicates)
 dmlTest.sm <- DMLtest(BSobj,  group1="REF", group2="TEST", smoothing=TRUE, ncores=4)
+
 cat("Total mehtylated loci before calling DMLs:", nrow(dmlTest.sm), "\n")
 head(dmlTest.sm)
+dmlTest.sm$end <- dmlTest.sm$pos + 2
+
 ```
 
 ## Identify DMLs based on statistical test results
@@ -81,6 +84,11 @@ head(dmls)
 # For DMLs add +2 to cover the whole CpG site as the locus
 dmls$end <- dmls$pos + 2
 
+canon_chrs <- paste0("chr", 1:22)
+
+dmls$chr <- factor(dmls$chr, levels = canon_chrs)
+# Order by chromosomes (with factor level order) and then by start position
+dmls <- dmls[order(dmls$chr, dmls$pos), ]
 ```
 
 ## Identify DMRs by grouping nearby significant CpGs (DMLs)
@@ -119,14 +127,32 @@ test_name <- tools::file_path_sans_ext(basename(params$input2), compression = TR
 # Define group label for use in DMR names
 test_label <- paste0(test_name)
 
-# Create DMR names for the non-strict DMR set
+# Create DMR names
 dmr_id_prefix <- paste0(test_label, "_DSS_DMR")
 dmrs$DMR_ID <- seq_len(nrow(dmrs))
 dmrs$name <- paste0(dmr_id_prefix, "_", dmrs$DMR_ID, "_", toupper(dmrs$chr))
 
 ```
 
-### Split strict DMRs by methylation direction
+## Split DMLs by methylation direction
+
+```{r}
+dml_id_prefix <- paste0(test_label, "_DSS_DML")
+dmls$DML_ID <- seq_len(nrow(dmls))
+dmls$name <- paste0(dml_id_prefix, "_", dmls$DML_ID, "_", toupper(dmls$chr))
+
+dmls_hyper <- subset(dmls, diff < 0)
+dmls_hypo <- subset(dmls, diff > 0)
+
+dmls_hyper_id_prefix <- paste0(test_label, "_DSS_DML_HYPER")
+dmls_hypo_id_prefix <- paste0(test_label, "_DSS_DML_HYPO")
+
+dmls_hyper$name <- sub("DSS_", "_DML_HYPER_", dmls_hyper$name)
+dmls_hypo$name  <- sub("DSS_", "_DML_HYPO_", dmls_hypo$name)
+
+```
+
+### Split DMRs by methylation direction
 
 The DMRs are split into hypermethylated and hypomethylated groups based on the direction of change in methylation between groups, and the region names are updated accordingly.
 
@@ -150,7 +176,10 @@ dmrs_hypo$name  <- sub("DMR_", "DMR_HYPO_", dmrs_hypo$name)
 
 ```{r}
 cat("Output Summary:\n")
+cat("  Total methylated Loci:", nrow(dmlTest.sm), "\n")
 cat("  Total DMLs:", nrow(dmls), "\n")
+cat("    Hypermethylated:", nrow(dmls_hyper), "\n")
+cat("    Hypomethylated:", nrow(dmls_hypo), "\n")
 cat("  Total DMRs:", nrow(dmrs), "\n")
 cat("    Hypermethylated:", nrow(dmrs_hyper), "\n")
 cat("    Hypomethylated:", nrow(dmrs_hypo), "\n")
@@ -168,16 +197,33 @@ today <- format(Sys.Date(), "%d_%m_%Y")
 # Create file prefix
 prefix <- paste0("HG38_", today, "_", toupper(test_name), "_VS_", toupper(ref_name))
 
+all_loci_file <- paste0(prefix, "_CpG_Loci.bed")
 dml_file <- paste0(prefix, "_DMLs.bed")
-dmr_file <- paste0(prefix, "_DMRs.bed")
+# Additional hypo/hyper output files
+dml_file_hyper <- paste0(prefix, "_DMLs_HYPER.bed")
+dml_file_hypo  <- paste0(prefix, "_DMLs_HYPO.bed")
 
+
+dmr_file <- paste0(prefix, "_DMRs.bed")
 # Additional hypo/hyper output files
 dmr_file_hyper <- paste0(prefix, "_DMRs_HYPER.bed")
 dmr_file_hypo  <- paste0(prefix, "_DMRs_HYPO.bed")
 
 # Write results to files
-write.table(dmls[, c("chr", "pos", "end")],
+write.table(dmlTest.sm[, c("chr", "pos", "end")],
+            file = all_loci_file,
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+write.table(dmls[, c("chr", "pos", "end", "name")],
             file = dml_file,
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+write.table(dmls_hyper[, c("chr", "pos", "end", "name")],
+            file = dml_file_hyper,
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+write.table(dmls_hypo[, c("chr", "pos", "end", "name")],
+            file = dml_file_hypo,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
 write.table(dmrs[, c("chr", "start", "end", "name")],
@@ -193,7 +239,10 @@ write.table(dmrs_hypo[, c("chr", "start", "end", "name")],
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
 # Outputs
+cat("Saving all methylated loci to:", all_loci_file, "\n")
 cat("Saving DMLs to:", dml_file, "\n")
+cat("Saving hyper DMLs to:", dml_file_hyper, "\n")
+cat("Saving hypo DMLs to:", dml_file_hypo, "\n")
 cat("Saving DMRs to:", dmr_file, "\n")
 cat("Saving hyper DMRs to:", dmr_file_hyper, "\n")
 cat("Saving hypo DMRs to:", dmr_file_hypo, "\n")
