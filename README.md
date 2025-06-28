@@ -34,7 +34,6 @@ git clone https://github.com/cemileblks/dss-analysis.git
 cd dss-analysis
 ```
 Install required software:
-
 - R (v4.0+)
 - R packages: `DSS`, `bsseq`, `GenomicRanges`, `rtracklayer`
 - Command-line tools: `bedtools`, `awk`, `bash`
@@ -42,34 +41,17 @@ Install required software:
 
 ## Usage
 
-This pipeline takes `.bedMethyl` and `.bedGraph` files from Oxford Nanopore methylation calls and outputs both statistics (DMLs/DMRs) and genome browser compatible `.bed` files.
+This pipeline processes `.bedMethyl` and `.bedGraph` files generated from Oxford Nanopore methylation data. It performs differential methylation analysis using the DSS R package and produces `.bed` and `.bw` files for downstream visualisation and analysis.
 
-.bedMethyl -> format_for_dss.sh -> tidy_dssin.sh -> final_dss_analysis.R -> list of tested cpg loci.bed hyper_dmls.bed hypo_dmls.bed hyper_dmrs.bed hypo_dmrs.bed
-           
-           -> bedmethyl_to_cpg.bed.sh 
-           (converst bedmethl to bed that
-           covers the whole cpg site in genome browser)
+The outputs include:
+- Lists of differentially methylated loci (DMLs) and regions (DMRs)
+- Filtered and converted `.bed` files for genome browser tracks
+- A `.bigWig` file showing methylation differences between conditions
+- (In progress) A statistical summary of significant DMLs/DMRs in `.Rmd` format
 
-.bedGraph files -> bedgraph_substract.sh         -> bedgraph_to_bigwig.sh (fixes c to CpG, sorts, bigwig file output (input_diff.bw)) -> IGV or genome browser visualisation to see if results are satisfactory, the other bedmehtyl_to_cpg also goes here as well as the detected hypo and hyper dmls and dmrs. The list of cpg loci from previous step is for statistical justification of the locations of dmls and dmrs in thge genome
-                    (substracts two bedgraph files to obtain
-                    differences in methylation levels and 
-                    filters chromosomes to autosomal canonical chrs)
+### 📊 Workflow Diagram
 
-
-flowchart LR
-    A[.bedMethyl] --> B[format_for_dss.sh]
-    B --> C[tidy_dssin.sh]
-    C --> D[final_dss_analysis.R]
-    D --> E1[tested_cpg_loci.bed]
-    D --> E2[hyper_dmls.bed / hypo_dmls.bed]
-    D --> E3[hyper_dmrs.bed / hypo_dmrs.bed]
-
-    A --> F[bedmethyl_to_cpg.bed.sh]
-    F --> G[IGV-ready CpG BED format]
-
-    H[.bedGraph WT + 3BKO] --> I[bedgraph_subtract.sh]
-    I --> J[bedgraph_to_bigwig.sh]
-    J --> K[input_diff.bw (IGV/Genome browser)]
+![Methylation Analysis Workflow](./assets/images/Workflow1.png)
 
 ## Credits
 
@@ -79,12 +61,8 @@ flowchart LR
 - [CLASS 2023 tutorials](https://github.com/boulderrinnlab/CLASS_2023)  
   Helpful for understanding genomic overlaps and using `GenomicRanges`.
 
-- Various YouTube walkthroughs  
-  Especially those covering `GenomicRanges` usage and methylation data visualization in R.
-
 Special thanks to my MSc supervisor and lab group for their guidance through this project.
 
 ## License
 
-This project is shared for academic and educational purposes only and does not currently use a formal open-source license.  
-If you plan to reuse or modify the code, please cite the project appropriately.
+This project is shared for academic and educational purposes only and does not currently use a formal open-source license. If you plan to reuse or modify the code, please cite the project appropriately.
