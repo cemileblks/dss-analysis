@@ -67,6 +67,16 @@ cat("Total mehtylated loci before calling DMLs:", nrow(dmlTest.sm), "\n")
 head(dmlTest.sm)
 dmlTest.sm$end <- dmlTest.sm$pos + 2
 
+canon_chrs <- paste0("chr", 1:22)
+
+dmlTest.sm$chr <- factor(dmlTest.sm$chr, levels = canon_chrs)
+# Order by chromosomes (with factor level order) and then by start position
+dmlTest.sm <- dmlTest.sm[order(dmlTest.sm$chr, dmlTest.sm$pos), ]
+
+cpg_loci_id_prefix <- "CpG"
+dmlTest.sm$CPG_ID <- seq_len(nrow(dmlTest.sm))
+dmlTest.sm$name <- paste0(cpg_loci_id_prefix, "_", dmlTest.sm$CPG_ID, "_", toupper(dmlTest.sm$chr))
+head(dmlTest.sm)
 ```
 
 ## Identify DMLs based on statistical test results
@@ -210,7 +220,7 @@ dmr_file_hyper <- paste0(prefix, "_DMRs_HYPER.bed")
 dmr_file_hypo  <- paste0(prefix, "_DMRs_HYPO.bed")
 
 # Write results to files
-write.table(dmlTest.sm[, c("chr", "pos", "end")],
+write.table(dmlTest.sm[, c("chr", "pos", "end", "name")],
             file = all_loci_file,
             sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
