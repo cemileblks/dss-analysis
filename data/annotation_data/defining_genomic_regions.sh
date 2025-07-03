@@ -6,7 +6,7 @@ wget ftp://ftp.ensembl.org/pub/release-114/gtf/homo_sapiens/Homo_sapiens.GRCh38.
 GTF_FILE="Homo_sapiens.GRCh38.114.gtf.gz"
 EXON_MERGED_FILE="Homo_sapiens.GRCh38.114_exons_merged.bed"
 INTRON_FILE="Homo_sapiens.GRCh38.114_introns.bed"
-PROMOTER_FILE="Homo_sapiens.GRCh38.114_promoters_merged.bed"
+TSS_FILE="Homo_sapiens.GRCh38.114_tss_merged.bed"
 THREE_PRIME_UTR_MERGED_FILE="Homo_sapiens.GRCh38.114_3utrs.bed"
 FIVE_PRIME_UTR_MERGED_FILE="Homo_sapiens.GRCh38.114_5utrs.bed"
 DOWNSTREAM_FILE="Homo_sapiens.GRCh38.114_downstream_1kb_merged.bed"
@@ -58,7 +58,7 @@ awk 'BEGIN{OFS="\t"}
          if (start < 0) start = 0;
          print chrom, start, end}' | \
 bedtools sort -i - -g genome_file_canonical.txt | \
-mergeBed -i - > "$PROMOTER_FILE"
+mergeBed -i - > "$TSS_FILE"
 
 # Extract 5utrs and 3utrs
 echo "Extracting and merging 5 prime utrs:"
@@ -101,7 +101,7 @@ mergeBed -i - > "$DOWNSTREAM_FILE"
 echo "Combining genic regions (exons, introns, UTRs, promoters, downstream)"
 cat "$EXON_MERGED_FILE" \
     "$INTRON_FILE" \
-    "$PROMOTER_FILE" \
+    "$TSS_FILE" \
     "$THREE_PRIME_UTR_MERGED_FILE" \
     "$FIVE_PRIME_UTR_MERGED_FILE" \
     "$DOWNSTREAM_FILE" | \
