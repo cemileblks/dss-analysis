@@ -1,0 +1,170 @@
+---
+title: "Defining genomic regions using R"
+author: "Cemile Balkas"
+date: "2025-07-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if (!requireNamespace("BiocManager", quitetly = TRUE)) {
+      install.packages("BiocManager")
+}
+if (!requireNamespace("GenomeInfoDb", quietly = TRUE)) {
+  BiocManager::install("GenomeInfoDb")
+}
+if (!requireNamespace("GenomicRanges", quietly = TRUE)) {
+  BiocManager::install("GenomicRanges")
+}
+if (!requireNamespace("GenomicFeatures", quietly = TRUE)) {
+  BiocManager::install("GenomicFeatures")
+}
+
+library(rtracklayer)
+library(dplyr)
+library(GenomeInfoDb)
+library(GenomicRanges)
+library(GenomicFeatures)
+source("assignChromRegionCounts.R")
+
+```
+
+## Get annotation file from Ensembl (Bash)
+
+```{bash get-annotation}
+# More info on annotation
+# https://www.ensembl.org/info/data/ftp/index.html
+# https://ftp.ensembl.org/pub/release-114/gtf/homo_sapiens/
+
+wget ftp://ftp.ensembl.org/pub/release-114/gtf/homo_sapiens/Homo_sapiens.GRCh38.114.gtf.gz -P data/annotation_data
+
+gunzip data/annotation_data/Homo_sapiens.GRCh38.114.gtf.gz
+```
+
+## Load annotation file from Ensembl
+
+```{r load-annotation}
+# Import ensembl annotation as GRanges -------------------------------
+ensembl_annot <- rtracklayer::import("data/annotation_data/Homo_sapiens.GRCh38.114.gtf")
+genome(ensembl_annot) <- "hg38"
+
+# Change the chromosome names to UCSC style (chr1, chr2...chrM) adapted from: https://www.bioconductor.org/packages/release/bioc/vignettes/GenomeInfoDb/inst/doc/GenomeInfoDb.pdf
+sequences <- seqlevels(ensembl_annot)
+ucsc_style <- mapSeqlevels(sequences, "UCSC")
+ucsc_style <- ucsc_style[complete.cases(ucsc_style)]
+ensembl_annot <- renameSeqlevels(ensembl_annot, ucsc_style)
+
+# Filter to autosomal chromosomes
+auto <- extractSeqlevelsByGroup(species="Homo sapiens", style="UCSC", group="auto")
+ensembl_annot <- keepSeqlevels(ensembl_annot, auto, pruning.mode = "coarse")
+
+# Import ensembl annotation as TxDb -------------------------------
+# Metadata for TxDb
+ensembl_metadata <- data.frame(
+  name = c("Genome", "Resource URL", "Type of Gene ID", "Full dataset"),
+  value = c(
+    "hg38",
+    "https://ftp.ensembl.org/pub/release-114/gtf/homo_sapiens/",
+    "Ensembl Gene ID",
+    "yes"
+  ),
+  stringsAsFactors = FALSE
+)
+
+# Make ensembl TxDb 
+ensembl_txdb <- txdbmaker::makeTxDbFromGFF(
+  file = "data/annotation_data/Homo_sapiens.GRCh38.114.gtf",
+  format = "gtf",
+  dataSource = "Ensembl",
+  organism = "Homo sapiens",
+  taxonomyId = 9606,
+  metadata = ensembl_metadata
+)
+
+# Change the chromosome names to UCSC style (chr1, chr2...chrM)
+sequences <- seqlevels(ensembl_txdb)
+ucsc_style <- mapSeqlevels(sequences, "UCSC")
+ucsc_style <- ucsc_style[complete.cases(ucsc_style)]
+ensembl_txdb <- renameSeqlevels(ensembl_txdb, ucsc_style)
+
+# Filter to autosomal chromosomes
+auto <- extractSeqlevelsByGroup(species="Homo sapiens", style="UCSC", group="auto")
+ensembl_txdb <- keepSeqlevels(ensembl_txdb, auto)
+
+```
+
+
+```{r}
+chrom_sizes <- read.table("data/chrom_sizes/hg38.chr1_22.chrom.sizes", header = FALSE, col.names = c("chromosome", "length"))
+
+chrom_sizes$start <- 1
+
+genome <- makeGRangesFromDataFrame(chrom_sizes, seqnames.field = "chromosome", start.field = "start", end.field = "length")
+
+```
+
+
+## Filter by gene and protein_coding
+```{r manual_export_features}
+
+# Protein‐coding genes from GTF import 
+genes_pc <- ensembl_annot[ensembl_annot$type == "gene" & ensembl_annot$gene_biotype == "protein_coding"]
+jst_pc <- ensembl_annot[ensembl_annot$gene_biotype == "protein_coding"]
+gene_ids_pc <- genes_pc$gene_id
+
+# Build each region by gene
+
+## Promoters: 200 upstream, 200bp downstream of the gene TSS ---------------
+promoter_regions <- unique(promoters(genes_pc, upstream   = 200, downstream = 200))
+promoter_regions <- GenomicRanges::reduce(promoter_regions)
+promoter_regions <- trim(promoter_regions)
+
+## Immediate downstream: 1kb past the gene end
+immeditate_downstream <- GenomicRanges::reduce(flank(genes_pc, width = 1000, start = FALSE))
+
+## 5' and 3' UTRs (only protein‐coding) ---------------
+utr5 <- ensembl_annot[ ensembl_annot$type == "five_prime_utr" & ensembl_annot$gene_biotype == "protein_coding" ]
+utr3<- ensembl_annot[ ensembl_annot$type == "three_prime_utr" & ensembl_annot$gene_biotype == "protein_coding" ]
+
+## Exons & Introns (only protein‐coding genes) ---------------
+exons <- ensembl_annot[ ensembl_annot$type == "exon" & ensembl_annot$gene_biotype == "protein_coding" ]
+
+introns_jst_pc <- intronsByTranscript(ensembl_txdb, use.names=TRUE) %>%
+  unlist() %>%
+  subsetByOverlaps(jst_pc) %>% # keep only introns from protein_coding genes
+  GenomicRanges::reduce()
+
+# Intergenic (everything else) --------------- Not working correctly
+all_features <- reduce(trim(c(promoter_regions, immeditate_downstream, utr5, utr3, exons, introns)))
+
+intergenic_regions <- setdiff(genome, all_features)
+
+# Step 4: Export intergenic regions to a BED file
+# Convert the GRanges object to a data frame
+intergenic_df <- as.data.frame(intergenic_regions)
+
+# Write the intergenic regions to a BED file
+write.table(intergenic_df, file = "intergenic_regions.bed", sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+# Put into a list and export each as BED -------------
+region_list_manual <- GRangesList(
+  Promoters           = promoter_regions,
+  immediateDownstream = immeditate_downstream,
+  fiveUTRs            = utr5,
+  threeUTRs           = utr3,
+  Exons               = exons,
+  Introns             = introns
+  # Intergenic.Region   = intergenic_manual # intergenic regions not working properly...
+)
+
+# Export each to its own .bed for IGV
+# This needs changing to 3 col bed file instead of 6 it is rn
+for (nm in names(region_list_manual)) {
+  gr     <- region_list_manual[[nm]]
+  mcols(gr) <- NULL               
+  bedfile <- paste0("IGV_check_", nm, ".bed") 
+  rtracklayer::export(gr, bedfile, format = "bed")
+  message("Wrote: ", bedfile)
+}
+```
