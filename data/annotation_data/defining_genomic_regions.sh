@@ -113,3 +113,8 @@ echo "Extracting intergenic regions (complement of genic features):"
 
 grep -E '^([1-9]|1[0-9]|2[0-2])[[:space:]]' genic_regions_merged.bed | \
 bedtools complement -i - -g "$GENOME_FILE" > "$INTERGENIC_FILE"
+
+# Converst evertything to ucsc style chr1 chr2 etc for compatability with dss output
+for f in *_merged.bed *_regions.bed *utrs.bed *introns.bed; do
+    awk 'BEGIN{OFS="\t"} {$1 = ($1 == "MT" ? "chrM" : "chr" $1); print}' "$f" > tmp && mv tmp "$f"
+done
