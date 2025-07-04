@@ -24,25 +24,25 @@ DOWNSTREAM="${GENOME_NAME}_downstream_1kb.bed"
 INTERGENIC="${GENOME_NAME}_intergenic.bed"
 GENIC_MERGED="genic_regions_merged.bed"
 
-# # Download data
-# echo "Downloading Ensembl GTF (release $RELEASE)..."
-# wget -nc ftp://ftp.ensembl.org/pub/release-${RELEASE}/gtf/homo_sapiens/${GTF_FILE} -P ./
+# Download data
+echo "Downloading Ensembl GTF (release $RELEASE)..."
+wget -nc ftp://ftp.ensembl.org/pub/release-${RELEASE}/gtf/homo_sapiens/${GTF_FILE} -P ./
 
-# echo "Downloading reference genome..."
-# wget -nc "ftp://ftp.ensembl.org/pub/release-${RELEASE}/fasta/homo_sapiens/dna/${FA_FILE}.gz"
-# gunzip -c "${FA_FILE}.gz" > "$FA_FILE"
+echo "Downloading reference genome..."
+wget -nc "ftp://ftp.ensembl.org/pub/release-${RELEASE}/fasta/homo_sapiens/dna/${FA_FILE}.gz"
+gunzip -c "${FA_FILE}.gz" > "$FA_FILE"
 
-# # Index FASTA and extract genome sizes
-# samtools faidx "$FA_FILE"
-# cut -f1,2 "$FAI_FILE" > "$GENOME_FILE"
-# grep -E '^([1-9]|1[0-9]|2[0-2]|X|Y|MT)[[:space:]]' "$GENOME_FILE" | sort -k1,1 > "$GENOME_FILE_CANONICAL"
-# grep -E '^([1-9]|1[0-9]|2[0-2])[[:space:]]' "$GENOME_FILE" | sort -k1,1 > "$GENOME_FILE_AUTOSOMAL"
-# echo "----------------------------------------"
+# Index FASTA and extract genome sizes
+samtools faidx "$FA_FILE"
+cut -f1,2 "$FAI_FILE" > "$GENOME_FILE"
+grep -E '^([1-9]|1[0-9]|2[0-2]|X|Y|MT)[[:space:]]' "$GENOME_FILE" | sort -k1,1 > "$GENOME_FILE_CANONICAL"
+grep -E '^([1-9]|1[0-9]|2[0-2])[[:space:]]' "$GENOME_FILE" | sort -k1,1 > "$GENOME_FILE_AUTOSOMAL"
+echo "----------------------------------------"
 
-# # Count the different types of features in the GTF file
-# echo "Counting the different types of features in the input file:"
-# zcat "$GTF_FILE" | grep -v "^#" | cut -f3 | sort | uniq -c | sort -k1rn
-# echo "----------------------------------------"
+# Count the different types of features in the GTF file
+echo "Counting the different types of features in the input file:"
+zcat "$GTF_FILE" | grep -v "^#" | cut -f3 | sort | uniq -c | sort -k1rn
+echo "----------------------------------------"
 
 # Define genomic features
 echo "Filtering for protein-coding features..."
