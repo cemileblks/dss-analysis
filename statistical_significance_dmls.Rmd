@@ -1,0 +1,226 @@
+---
+title: "Statistical Significance of DMLs by genomic regions"
+author: "Cemile Balkas"
+date: "2025-07-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load files
+
+```{r}
+
+df_dml_feature_counts <- read.csv("dml_feature_overlap_output/overlap_counts_exclusive.csv")
+head(df_dml_feature_counts)
+df_overlap_inclusive <- read.csv("dml_feature_overlap_output/overlap_counts.csv")
+
+
+```
+
+## Summarise totals
+
+```{r}
+
+# Get total background counts
+total_cpg <- sum(df_dml_feature_counts$All_CpG_Count)
+total_hyper <- sum(df_dml_feature_counts$HyperDMLs)
+total_hypo <- sum(df_dml_feature_counts$HypoDMLs)
+
+# Show totals
+total_cpg
+total_hyper
+total_hypo
+
+```
+
+## Run Fisher's Test for Hyper DMLs
+Are hypermethylated DMLs more common in this feature than we would expect by chance?
+
+We test if the proportion of DMLs in this feature is significantly different from what you'd expect based on the overall CpG background...
+
+```{r}
+options(scipen = 0)  # turn off scientific notation
+
+# Run Fisher's test for all features for HyperDMLs
+fisher_results_hyper <- data.frame()
+
+for (i in 1:nrow(df_dml_feature_counts)) {
+  # table logic
+  #               In_feature    Not_in_feature      Total
+  # DML               a               b           total_hyper
+  # Not_DML           c               d                .
+  # Total       bkg_in_feature        .            total_cpg
+  
+  a <- df_dml_feature_counts$HyperDMLs[i]
+  bkg_in_feature <- df_dml_feature_counts$All_CpG_Count[i]
+  c <- bkg_in_feature - a
+  
+  total_hyper <- sum(df_dml_feature_counts$HyperDMLs)
+  total_cpg <- sum(df_dml_feature_counts$All_CpG_Count)
+  
+  b <- total_hyper - a
+  d <- (total_cpg - bkg_in_feature) - b
+    
+  contingency <- matrix(c(a, b, c, d),
+                        nrow = 2,
+                        dimnames = list(
+                          Region = c("In_Feature", "Not_In_Feature"),
+                          Status = c("DML", "Not_DML")
+                        ))
+  
+  test <- fisher.test(contingency)
+
+  fisher_pval <- test$p.value
+  odds_ratio <- as.numeric(test$estimate)
+
+  fisher_results_hyper <- rbind(fisher_results_hyper, data.frame(
+    Feature = df_dml_feature_counts$Feature[i],
+    p_value = fisher_pval,
+    OddsRatio = odds_ratio
+  ))
+}
+
+fisher_results_hyper
+```
+
+```{r}
+fisher_results_hypo <- data.frame()
+
+for (i in 1:nrow(df_dml_feature_counts)) {
+  # table logic
+  #               In_feature    Not_in_feature      Total
+  # DML               a               b           total_hyper
+  # Not_DML           c               d                .
+  # Total       bkg_in_feature        .            total_cpg
+  
+  a <- df_dml_feature_counts$HypoDMLs[i]
+  bkg_in_feature <- df_dml_feature_counts$All_CpG_Count[i]
+  c <- bkg_in_feature - a
+  
+  total_hypo <- sum(df_dml_feature_counts$HypoDMLs)
+  total_cpg <- sum(df_dml_feature_counts$All_CpG_Count)
+  
+  b <- total_hypo - a
+  d <- (total_cpg - bkg_in_feature) - b
+    
+  contingency <- matrix(c(a, b, c, d),
+                        nrow = 2,
+                        dimnames = list(
+                          Region = c("In_Feature", "Not_In_Feature"),
+                          Status = c("DML", "Not_DML")
+                        ))
+  
+  test <- fisher.test(contingency)
+
+  fisher_pval <- test$p.value
+  odds_ratio <- as.numeric(test$estimate)
+
+  fisher_results_hypo <- rbind(fisher_results_hypo, data.frame(
+    Feature = df_dml_feature_counts$Feature[i],
+    p_value = fisher_pval,
+    OddsRatio = odds_ratio
+  ))
+}
+
+fisher_results_hyper
+
+```
+
+```{r}
+# Rename columns for clarity before merging
+names(fisher_results_hyper) <- c("Feature", "Hyper_p", "Hyper_Odds")
+names(fisher_results_hypo) <- c("Feature", "Hypo_p", "Hypo_Odds")
+
+# Merge on Feature
+fisher_combined <- merge(fisher_results_hyper, fisher_results_hypo, by = "Feature")
+
+# View combined results
+fisher_combined
+
+```
+
+The Fisher's exact tests compare the proportion of hyper- and hypomethylated DMLs within each genomic feature to the background of all tested CpG sites.
+
+Intergenic regions show strong enrichment for both hyper- and hypomethylated DMLs:
+    - Odds Ratios: Hyper = 2.05, Hypo = 1.79
+    - This suggests that DMLs are overrepresented in intergenic regions compared to expected background levels.
+
+- Exons and 3′ UTRs show  depletion of DMLs:
+    - Exons: Hyper = 0.45, Hypo = 0.49
+    - 3′ UTRs: Hyper = 0.24, Hypo = 0.50
+    - These odds ratios indicate that DMLs are less likely to occur in coding and 3′ regulatory regions.
+
+- TSS (transcription start sites) show mild depletion for hyper-DMLs (OR = 0.81), and stronger depletion for hypo-DMLs (OR = 0.33), both statistically significant.
+
+- 5′ UTRs show no significant enrichment or depletio:
+    - Hyper odds ratio ≈ 1, and p = 0.74
+    - This suggests that DMLs in 5′ UTRs occur at expected background levels.
+
+These results indicate that differential methylation are more frequently found in intergenic regions or introns.
+
+
+# Tests for overlaps wihtout prececence 
+
+```{r}
+options(scipen = 0)  # turn off scientific notation
+
+# Run Fisher's test for all features for HyperDMLs
+fisher_results_inclusive_hyper <- data.frame()
+
+for (i in 1:nrow(df_overlap_inclusive)) {
+  # table logic
+  #               In_feature    Not_in_feature      Total
+  # DML               a               b           total_hyper
+  # Not_DML           c               d                .
+  # Total       bkg_in_feature        .            total_cpg
+  
+  a <- df_overlap_inclusive$HyperDMLs[i]
+  bkg_in_feature <- df_overlap_inclusive$All_CpG_Count[i]
+  c <- bkg_in_feature - a
+  
+  total_hyper <- sum(df_overlap_inclusive$HyperDMLs)
+  total_cpg <- sum(df_overlap_inclusive$All_CpG_Count)
+  
+  b <- total_hyper - a
+  d <- (total_cpg - bkg_in_feature) - b
+    
+  contingency <- matrix(c(a, b, c, d),
+                        nrow = 2,
+                        dimnames = list(
+                          Region = c("In_Feature", "Not_In_Feature"),
+                          Status = c("DML", "Not_DML")
+                        ))
+  
+  test <- fisher.test(contingency)
+
+  fisher_pval <- test$p.value
+  odds_ratio <- as.numeric(test$estimate)
+
+  fisher_results_inclusive_hyper <- rbind(fisher_results_inclusive_hyper, data.frame(
+    Feature = df_dml_feature_counts$Feature[i],
+    p_value = fisher_pval,
+    OddsRatio = odds_ratio
+  ))
+}
+
+fisher_results_inclusive_hyper
+```
+
+Fisher's exact tests were performed using both exclusive and inclusive genomic feature overlaps. Odds ratios were very similar across both approaches, meaning a consistent pattern of DML enrichment or depletion.
+
+While p-values differed slightly most liketly due to overlapping feature counts but the overall conclusions remain the same
+
+## Conclusions
+
+To assess whether differentially methylated loci (DMLs) preferentially occur in specific genomic regions, we performed Fisher's exact tests comparing the distribution of hyper- and hypomethylated DMLs across annotated features relative to the background of all tested CpG sites.
+
+The results showed extremely small p-values for most genomic features, indicating highly significant differences between the observed distribution of DMLs and the background. Based on the odds ratios, DMLs were strongly enriched in intergenic and intronic regions, while significantly depleted in exons, 3′ UTRs, and TSS regions.
+
+These findings suggest that differential methylation is not randomly distributed throughout the genome, but tends to occur more often in certain genomic features.
+
+Differentially methylated regions (DMRs) were identified using the same statistical thresholds and parameters as the DML analysis, i.e. the same minimum methylation difference, smoothing, and significance cut-offs.
+
+Although permutation-based methods could be used in principle to assess the significance of DMRs, they are computationally intensive and were not applied here due to time constraints. However, since our Fisher's exact tests demonstrated that DMLs detected under the same parameters are highly statistically significant across multiple genomic features, we can infer that the DMRs identified are also likely to be satisfactory. 
