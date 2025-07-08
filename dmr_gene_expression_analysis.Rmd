@@ -1,0 +1,80 @@
+---
+title: "DMR Associated Gene Expression Changes"
+author: "Cemile Balkas"
+date: "2025-07-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(ggplot2)
+library(dplyr)
+```
+
+## Load DESeq2 Results
+
+```{r}
+
+de <- read.table(file = 'Deseq2_Genotype_DNMT3B_vs_WT_sval_annot_190623.txt', sep = '\t', header = TRUE)
+
+```
+
+
+## Load DMR Gene Lists
+
+```{r}
+# Define gene group files
+gene_list_files <- list(
+  "hyper_tss" = "dmr_feature_gene_mapping_output/hyper_tss_gene_ids.txt",
+  "hyper_exons" = "dmr_feature_gene_mapping_output/hyper_exons_gene_ids.txt",
+  "hyper_introns" = "dmr_feature_gene_mapping_output/hyper_introns_gene_ids.txt",
+  "hyper_3utrs" = "dmr_feature_gene_mapping_output/hyper_3utrs_gene_ids.txt",
+  "hyper_5utrs" = "dmr_feature_gene_mapping_output/hyper_5utrs_gene_ids.txt",
+  "hyper_downstream_1kb" = "dmr_feature_gene_mapping_output/hyper_downstream_1kb_gene_ids.txt",
+  "hypo_tss" = "dmr_feature_gene_mapping_output/hypo_tss_gene_ids.txt",
+  "hypo_exons" = "dmr_feature_gene_mapping_output/hypo_exons_gene_ids.txt",
+  "hypo_introns" = "dmr_feature_gene_mapping_output/hypo_introns_gene_ids.txt",
+  "hypo_3utrs" = "dmr_feature_gene_mapping_output/hypo_3utrs_gene_ids.txt",
+  "hypo_5utrs" = "dmr_feature_gene_mapping_output/hypo_5utrs_gene_ids.txt",
+  "hypo_downstream_1kb" = "dmr_feature_gene_mapping_output/hypo_downstream_1kb_gene_ids.txt"
+)
+
+# Load into a named list of dataframes
+gene_groups <- lapply(gene_list_files, read_lines)
+
+```
+
+
+## Compare Log2FC Distributions
+
+```{r}
+plot_df <- bind_rows(
+  lapply(names(gene_groups), function(group_name) {
+    tibble(Ensembl_id = gene_groups[[group_name]], group = group_name)
+  })
+) %>%
+  left_join(de, by = "Ensembl_id") %>%
+  filter(!is.na(log2FoldChange.y))
+
+
+
+ggplot(plot_df, aes(x = group, y = log2FoldChange.y, fill = group)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  coord_cartesian(ylim = c(-6, 6)) +  # Zoom to focus on majority
+  labs(
+    title = "log2FoldChange by DMR Group",
+    x = "DMR Feature Group",
+    y = "log2FoldChange (KO vs WT)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    legend.position = "none"
+  )
+
+
+
+```
+
