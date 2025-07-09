@@ -10,6 +10,14 @@ knitr::opts_chunk$set(echo = TRUE)
 library(readr)
 library(ggplot2)
 library(dplyr)
+if (!requireNamespace("devel", quietly = TRUE)) {
+  BiocManager::install("devel")
+}
+if (!requireNamespace("clusterProfiler", quietly = TRUE)) {
+  BiocManager::install("clusterProfiler")
+}
+library(clusterProfiler)
+library(org.Hs.eg.db)
 ```
 
 ## Load DESeq2 Results
@@ -25,6 +33,9 @@ de <- read.table(file = 'Deseq2_Genotype_DNMT3B_vs_WT_sval_annot_190623.txt', se
 
 ```{r}
 # Define gene group files
+# group of gene ids with hyper methylated tss
+# group of gene ids with hyper methylated exons
+# group of genes with hyoo methlated introns etc etc. 
 gene_list_files <- list(
   "hyper_tss" = "dmr_feature_gene_mapping_output/hyper_tss_gene_ids.txt",
   "hyper_exons" = "dmr_feature_gene_mapping_output/hyper_exons_gene_ids.txt",
@@ -49,32 +60,158 @@ gene_groups <- lapply(gene_list_files, read_lines)
 ## Compare Log2FC Distributions
 
 ```{r}
+# combine all gene lists (tss, introns etc) into one big table with labels
 plot_df <- bind_rows(
   lapply(names(gene_groups), function(group_name) {
     tibble(Ensembl_id = gene_groups[[group_name]], group = group_name)
   })
 ) %>%
-  left_join(de, by = "Ensembl_id") %>%
-  filter(!is.na(log2FoldChange.y))
+  left_join(de, by = "Ensembl_id") %>% # Join with DE results (log2FC etc.) on Ensembl gene ID
+  filter(!is.na(log2FoldChange.y)) # Keep only genes that are in the DESeq2 results
 
-
-
+# Plot the log2FC distributions per DMR group
 ggplot(plot_df, aes(x = group, y = log2FoldChange.y, fill = group)) +
   geom_boxplot(outlier.shape = NA, alpha = 0.8) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
-  coord_cartesian(ylim = c(-6, 6)) +  # Zoom to focus on majority
+  coord_cartesian(ylim = c(-8, 8)) +  
   labs(
     title = "log2FoldChange by DMR Group",
     x = "DMR Feature Group",
     y = "log2FoldChange (KO vs WT)"
   ) +
-  theme_minimal(base_size = 12) +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
     legend.position = "none"
   )
 
+```
+From this plot it can be seen that the hyper_tss group shows negative median log2FC suggesting that genes with hypermethylated TSSs are often downregulated in the KO dataset. (This is consistent with what we expected to see as it is widely accepted that mehtylation in promoters represses treanscription)
 
+Rest of the groups hover around 0 not showing any extreme biases in changes in expression levels. The variance in most box plots also seem to tight except the hyper_tss group.
+
+## How many genes are there per group? 
+## How many are up/down regulated 
+
+```{r}
+# Make list to hold filtered DE genes per group
+sig_genes_per_group <- list()
+
+# Create a summary table and save the filtered genes
+summary_df <- lapply(names(gene_groups), function(group_name) {
+  # get the list of ensembl IDs for the current group
+  ids <- gene_groups[[group_name]]
+  # subset the differential expression results data frame to only genes present in current group's list 
+  sub_de <- subset(de, Ensembl_id %in% ids)
+  
+  # Filter significant genes (padj < 0.05 and |log2FC| > 1)
+  sig <- subset(sub_de, padj < 0.05 & abs(log2FoldChange.y) > 1)
+  
+  # Save the filtered genes into a named list
+  sig_genes_per_group[[group_name]] <<- sig 
+  
+  # at a significance level of 0.05, separate the genes weather they were up-regulated or down-regulated and count them
+  total <- nrow(sub_de)
+  up <- sum(sig$log2FoldChange.y > 1, na.rm = TRUE)
+  down <- sum(sig$log2FoldChange.y < -1, na.rm = TRUE)
+  
+  data.frame(Group = group_name, Total = total, Upregulated = up, Downregulated = down)
+})
+
+# take the list of individual data frames and bind them into one big table
+summary_df <- do.call(rbind, summary_df)
+print(summary_df)
+```
+
+## Lets have a look at gene body DMRs
+
+```{r}
+# define which DMR groups are "gene body" groups
+gene_body_groups <- c("hyper_exons", "hyper_introns", "hypo_exons", "hypo_introns")
+
+# Save all genes in individual named data frames
+for (group in gene_body_groups) {
+  assign(paste0("df_", group), sig_genes_per_group[[group]])
+}
+
+for (group in gene_body_groups) {
+  df <- get(paste0("df_", group))
+  cat("\nTop 10 genes for", group, ":\n")
+  print(head(df[order(df$padj), c("Ensembl_id", "external_gene_name", "log2FoldChange.y", "padj")], 10))
+}
 
 ```
+
+## GO Enrichment 
+
+```{r}
+genes_hyper_exons <- df_hyper_exons$Ensembl_id
+
+# 3. Run enrichment (GO Biological Process)
+ego_hyper_exons <- enrichGO(
+  gene          = genes_hyper_exons,
+  OrgDb         = org.Hs.eg.db,
+  keyType       = "ENSEMBL",     # Your input ID type
+  ont           = "BP",          # BP = Biological Process
+  pAdjustMethod = "BH",
+  pvalueCutoff  = 0.05,
+  qvalueCutoff  = 0.05
+)
+
+# 4. Visualize top terms
+dotplot(ego_hyper_exons, showCategory = 15) + ggtitle("GO BP: Hyper-methylated Exons")
+dotplot(ego_hyper_exons) + ggtitle("GO BP: Hyper-methylated Exons")
+```
+
+```{r}
+
+genes_hyper_exons <- df_hyper_exons$Ensembl_id
+
+ora_hyper_exons <- enrichGO(
+  gene          = genes_hyper_exons,
+  OrgDb         = org.Hs.eg.db,
+  keyType       = "ENSEMBL",     # Your input ID type
+  ont           = "CC",          # BP = Biological Process
+  pAdjustMethod = "BH",
+  pvalueCutoff  = 0.05,
+  qvalueCutoff  = 0.05
+)
+dotplot(ora_hyper_exons) + ggtitle("GO CC: Hyper-methylated Exons")
+
+```
+```{r}
+
+genes_hyper_exons <- df_hyper_exons$Ensembl_id
+
+ora_hyper_exons_mf <- enrichGO(
+  gene          = genes_hyper_exons,
+  OrgDb         = org.Hs.eg.db,
+  keyType       = "ENSEMBL",     # Your input ID type
+  ont           = "MF",          # BP = Biological Process
+  pAdjustMethod = "BH",
+  pvalueCutoff  = 0.05,
+  qvalueCutoff  = 0.05
+)
+
+dotplot(ora_hyper_exons_mf) + ggtitle("GO MF: Hyper-methylated Exons")
+
+```
+
+
+## Top differentially expressed genes per DMR group
+
+```{r}
+
+for (group_name in names(gene_groups)) {
+  cat("\n--- Top DE genes in", group_name, "---\n")
+  
+  ids <- gene_groups[[group_name]]
+  sub_de <- de[de$Ensembl_id %in% ids & de$padj < 0.05, ]
+  top <- sub_de[order(sub_de$padj), ]
+  
+  print(head(top[c("external_gene_name", "log2FoldChange.y", "padj")], 5))
+}
+
+```
+
+
 
