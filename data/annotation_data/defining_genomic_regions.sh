@@ -1,6 +1,40 @@
 #!/usr/bin/bash
 
-# This script defines exons, introns, TSS, UTRs, downstream, and intergenic regions from Ensembl GTF
+# -----------------------------------------------------------------------------
+# Script: defining_genomic_regions.sh
+# Purpose: Define genomic regions from an Ensembl GTF annotation file.
+
+# Description:
+# This script extracts and processes Ensembl gene annotation and reference
+# genome data to generate BED files for genomic regions including:
+#   - Protein-coding genes (with gene_id)
+#   - Exons, introns, promoters/transcription statrt sites (±200bp TSS), UTRs, downstream 1kb
+#   - Intergenic regions (complement of all genic features)
+
+# Usage:
+#   ./defining_genomic_regions.sh
+
+# Inputs:
+#   - Ensembl GTF (release-specified)
+#   - Ensembl reference genome FASTA (primary assembly)
+
+# Outputs:
+#   - BED files with UCSC-style chromosome names (for compatability with the DSS outputs from R):
+#       hg38_protein_coding_genes.bed
+#       hg38_exons.bed
+#       hg38_introns.bed
+#       hg38_tss.bed
+#       hg38_5utrs.bed
+#       hg38_3utrs.bed
+#       hg38_downstream_1kb.bed
+#       hg38_intergenic.bed
+
+# Notes:
+#   - Filters only canonical autosomal chromosomes (chr1–22)
+#   - All coordinates are 0-based BED format
+#   - Uses Ensembl release defined by $RELEASE variable
+#   - Temporary files and large downloads are cleaned at the end
+# -----------------------------------------------------------------------------
 
 # Parameters
 RELEASE="114"

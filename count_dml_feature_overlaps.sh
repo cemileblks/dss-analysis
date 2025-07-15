@@ -1,4 +1,43 @@
 #!/usr/bin/bash
+
+# -----------------------------------------------------------------------------
+# Script: count_dml_feature_overlaps.sh
+
+# Purpose:
+#   This script computes how differentially methylated loci (DMLs) and all CpG 
+#   sites overlap with genomic annotation features (e.g. TSS, exons, introns).
+#   It produces two types of counts:
+#     1. Non-exclusive overlaps: CpGs/DMLs may count toward multiple features
+#     2. Exclusive overlaps: CpGs/DMLs assigned uniquely by feature precedence
+
+# Usage:
+#   ./count_dml_feature_overlaps.sh <CpGs.bed> <hyper_DMLs.bed> <hypo_DMLs.bed> [output_directory]
+
+# Inputs:
+#   - CpGs.bed         : All tested CpG sites (BED format, 4 columns)
+#   - hyper_DMLs.bed   : Hyper-methylated DMLs (BED format, 4 columns)
+#   - hypo_DMLs.bed    : Hypo-methylated DMLs (BED format, 4 columns)
+#   - output_directory : (Optional) Where to store the results (default: dml_feature_overlap_output/)
+
+# Outputs:
+#   - overlap_counts.csv            : Table of non-exclusive overlap counts
+#   - overlap_counts_exclusive.csv  : Table of exclusive (precedence-based) counts
+#   - BED files of CpGs/DMLs per feature in output directory (exclusive only)
+
+# Feature precedence (for exclusive assignment):
+#   TSS > downstream_1kb > 5' UTR > 3' UTR > exons > introns > intergenic
+
+# Requirements:
+#   - bedtools installed and in PATH
+#   - Annotation BED files located in ./data/annotation_data/ with names like:
+#     hg38_tss.bed, hg38_exons.bed, etc.
+
+# Notes:
+#   - Uses `bedtools intersect` to calculate overlaps
+#   - Handles cases where no overlaps are found gracefully (returns 0)
+#   - Exclusive assignment removes each CpG/DML from further categories once matched
+# -----------------------------------------------------------------------------
+
 # Exit if any part of code fails
 set -euo pipefail
 
