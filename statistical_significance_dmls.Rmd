@@ -16,20 +16,22 @@ Fisher's exact tests were used to compare hyper- and hypomethylated DMLs across 
 
 The aim is to see if DMLs are randomly distributed or if they tend to cluster in certain regions.
 
-
 ```{r setup, include=FALSE}
 library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Load files
+## Load Data
 
 ```{r load-files}
 df_dml_feature_counts <- read.csv("dml_feature_overlap_output/overlap_counts_exclusive.csv")
+total_cpg <- sum(df_dml_feature_counts$All_CpG_Count)
+df_dml_feature_counts$Percent_of_Total_CpGs <- round(100 * df_dml_feature_counts$All_CpG_Count / total_cpg, 2)
 kable(df_dml_feature_counts, caption = "Exclusive counts per genomic feature")
 
 df_overlap_inclusive <- read.csv("dml_feature_overlap_output/overlap_counts.csv")
-kable(df_dml_feature_counts, caption = "Non-exclusive counts per genomic feature")
+df_overlap_inclusive$Percent_of_Total_CpGs <- round(100 * df_overlap_inclusive$All_CpG_Count / total_cpg, 2)
+kable(df_overlap_inclusive, caption = "Non-exclusive counts per genomic feature")
 ```
 
 ## Summarise totals
@@ -46,6 +48,87 @@ total_hyper
 total_hypo
 ```
 
+## Fisher's Exact test with box analogy 
+
+To determine whether differentially methylated loci (DMLs) are enriched in specific genomic features (eg TSS, exons), the distribution of DMLs is compared to all tested CpG sites using Fisher's Exact Test.
+
+This can be explained by this analogy:
+
+- Imagine a box containing 1,000 colored balls, each representing a tested CpG site.
+  - 200 balls are red, representing CpGs in a particular genomic feature (eg TSS).
+  - 800 balls are white representing CpGs not in that feature.
+
+- If a total of 300 balls are randomly drawn from the box to represent DMLs.
+  - Among these there are 90 red balls — ie 90 DMLs fall in TSS.
+  - The question: Is observing 90 red balls (DMLs in TSS) more than expected by chance?
+
+If DMLs were randomly distributed, the expected number of red DMLs would be:
+
+300 * (200 / 1000) = 60
+
+90 > 60 but is this statistically significant? 
+
+Fisher's Exact Test calculates the probability of seeing 90 or more red balls in a random draw of 300, given the background proportions using the hypergeometric distribution.
+
+**For Fisher's test to be valid:**
+
+  - CpGs must fall into mutually exclusive groups: each site is either a DML or not, and either in the feature or not.
+
+  - All CpGs must come from the same tested background set, not the whole genome.
+
+In this analysis, Fisher's test is applied first to exclusive overlaps, where each CpG is assigned to only one feature, and then to hyper dmls in non-exclusive overlaps.
+
+
+
+```{r analogy-fisher-test}
+box_analogy_CpGs <- data.frame(
+  CpG_in_tss = c(90, 110),
+  CpG_not_in_tss = c(210, 590),
+  row.names = c("DML", "Non-DML")
+)
+
+box_analogy_CpGs
+
+fisher.test(box_analogy_CpGs)
+```
+## Fisher's test example: Hyper-DMLs in TSS
+
+Total CpGs tested (total balls in the box): 27,145,793
+CpGs in TSS (red balls): 492,557
+
+Hyper-DMLs (balls drawn from the box): 927,367
+Hyper-DMLs in TSS (red balls drawn): 13,708
+
+927367 * (492557 / 27145793) = 16,827
+
+But only 13,708 observed : fewer than expected... statistically significant?
+
+```{r}
+# Totals
+total_cpgs <- 27145793
+total_hyper_dmls <- 927367
+tss_cpgs <- 492557
+tss_hyper_dmls <- 13708
+
+# Calculate values
+hyperdml_in_tss <- tss_hyper_dmls
+hyperdml_not_in_tss <- total_hyper_dmls - hyperdml_in_tss
+
+non_dml_total <- total_cpgs - total_hyper_dmls
+non_dml_in_tss <- tss_cpgs - hyperdml_in_tss
+non_dml_not_in_tss <- non_dml_total - non_dml_in_tss
+
+# Create table
+hyperdml_CpGs <- data.frame(
+  CpG_in_tss = c(hyperdml_in_tss, non_dml_in_tss),
+  CpG_not_in_tss = c(hyperdml_not_in_tss, non_dml_not_in_tss),
+  row.names = c("HyperDML", "Non-DML")
+)
+
+hyperdml_CpGs
+
+fisher.test(hyperdml_CpGs)
+```
 ## Run Fisher's Test for Hyper DMLs
 Are hypermethylated DMLs more common in this feature than we would expect by chance?
 
@@ -60,26 +143,24 @@ fisher_results_hyper <- data.frame()
 for (i in 1:nrow(df_dml_feature_counts)) {
   # table logic
   #               In_feature    Not_in_feature      Total
-  # DML               a               b           total_hyper
+  # DML               a               b           total_hyper_dmls
   # Not_DML           c               d                .
-  # Total       bkg_in_feature        .            total_cpg
+  # Total     total_cpg_in_feature    .            total_cpg
 
-  a <- df_dml_feature_counts$HyperDMLs[i]
-  bkg_in_feature <- df_dml_feature_counts$All_CpG_Count[i]
-  c <- bkg_in_feature - a
-
-  total_hyper <- sum(df_dml_feature_counts$HyperDMLs)
   total_cpg <- sum(df_dml_feature_counts$All_CpG_Count)
+  total_cpg_in_feature <- df_dml_feature_counts$All_CpG_Count[i]
+  total_hyper_dmls <- sum(df_dml_feature_counts$HyperDMLs)
+  total_hyper_dmls_in_feature <- df_dml_feature_counts$HyperDMLs[i]
 
-  b <- total_hyper - a
-  d <- (total_cpg - bkg_in_feature) - b
+  a <- total_hyper_dmls_in_feature
+  b <- total_hyper_dmls - a
+  c <- total_cpg_in_feature - a
+  d <- (total_cpg - total_cpg_in_feature) - b
 
-  contingency <- matrix(c(a, b, c, d),
-    nrow = 2,
-    dimnames = list(
-      Region = c("In_Feature", "Not_In_Feature"),
-      Status = c("DML", "Not_DML")
-    )
+  contingency <- data.frame(
+    In_Feature = c(a, c),
+    Not_In_Feature = c(b, d),
+    row.names = c("DML", "Not_DML")
   )
 
   test <- fisher.test(contingency)
@@ -105,26 +186,24 @@ fisher_results_hypo <- data.frame()
 for (i in 1:nrow(df_dml_feature_counts)) {
   # table logic
   #               In_feature    Not_in_feature      Total
-  # DML               a               b           total_hyper
+  # DML               a               b           total_hypo_dmls
   # Not_DML           c               d                .
-  # Total       bkg_in_feature        .            total_cpg
+  # Total     total_cpg_in_feature    .            total_cpg
 
-  a <- df_dml_feature_counts$HypoDMLs[i]
-  bkg_in_feature <- df_dml_feature_counts$All_CpG_Count[i]
-  c <- bkg_in_feature - a
-
-  total_hypo <- sum(df_dml_feature_counts$HypoDMLs)
   total_cpg <- sum(df_dml_feature_counts$All_CpG_Count)
+  total_cpg_in_feature <- df_dml_feature_counts$All_CpG_Count[i]
+  total_hypo_dmls <- sum(df_dml_feature_counts$HypoDMLs)
+  total_hypo_dmls_in_feature <- df_dml_feature_counts$HypoDMLs[i]
 
-  b <- total_hypo - a
-  d <- (total_cpg - bkg_in_feature) - b
+  a <- total_hypo_dmls_in_feature
+  b <- total_hypo_dmls - a
+  c <- total_cpg_in_feature - a
+  d <- (total_cpg - total_cpg_in_feature) - b
 
-  contingency <- matrix(c(a, b, c, d),
-    nrow = 2,
-    dimnames = list(
-      Region = c("In_Feature", "Not_In_Feature"),
-      Status = c("DML", "Not_DML")
-    )
+  contingency <- data.frame(
+    In_Feature = c(a, c),
+    Not_In_Feature = c(b, d),
+    row.names = c("DML", "Not_DML")
   )
 
   test <- fisher.test(contingency)
@@ -167,7 +246,7 @@ Intergenic regions show strong enrichment for both hyper- and hypomethylated DML
 
 - TSS (transcription start sites) show mild depletion for hyper-DMLs (OR = 0.81), and stronger depletion for hypo-DMLs (OR = 0.33), both statistically significant.
 
-- 5' UTRs show no significant enrichment or depletio:
+- 5' UTRs show no significant enrichment or depletion:
     - Hyper odds ratio roughly = 1, and p = 0.74
     - This suggests that DMLs in 5' UTRs occur at expected background levels.
 
@@ -187,17 +266,17 @@ for (i in 1:nrow(df_overlap_inclusive)) {
   #               In_feature    Not_in_feature      Total
   # DML               a               b           total_hyper
   # Not_DML           c               d                .
-  # Total       bkg_in_feature        .            total_cpg
+  # Total       total_in_feature        .            total_cpg
 
   a <- df_overlap_inclusive$HyperDMLs[i]
-  bkg_in_feature <- df_overlap_inclusive$All_CpG_Count[i]
-  c <- bkg_in_feature - a
+  total_in_feature <- df_overlap_inclusive$All_CpG_Count[i]
+  c <- total_in_feature - a
 
   total_hyper <- sum(df_overlap_inclusive$HyperDMLs)
   total_cpg <- sum(df_overlap_inclusive$All_CpG_Count)
 
   b <- total_hyper - a
-  d <- (total_cpg - bkg_in_feature) - b
+  d <- (total_cpg - total_in_feature) - b
 
   contingency <- matrix(c(a, b, c, d),
     nrow = 2,
@@ -237,3 +316,57 @@ These findings suggest that differential methylation is not randomly distributed
 Differentially methylated regions (DMRs) were identified using the same statistical thresholds and parameters as the DML analysis, i.e. the same minimum methylation difference, smoothing, and significance cut-offs.
 
 Although permutation-based methods could be used in principle to assess the significance of DMRs, they are computationally intensive and were not applied here due to time constraints. However, since our Fisher's exact tests demonstrated that DMLs detected under the same parameters are highly statistically significant across multiple genomic features, we can infer that the DMRs identified are also likely to be satisfactory. 
+
+## Testing how Fisher's Test work...
+
+```{r tests}
+# my_test_df <- data.frame(
+#   Background = c(492557, 27145793 - 492557), HypoDML = c(11190, 1762487 - 11190),
+#   row.names = c("TSS", "NOT-TSS")
+# )
+# 
+# my_test_fisher <- fisher.test(my_test_df)
+# my_test_fisher
+# 
+# 
+# my_test_fisher$p.value
+# my_test_fisher$estimate
+# 
+# my_test_df <- data.frame(
+#   Background = c(12758595, 27145793 - 12758595), HypoDML = c(1064491, 1762487 - 1064491),
+#   row.names = c("TSS", "NOT-TSS")
+# )
+# 
+# my_test_fisher <- fisher.test(my_test_df)
+# my_test_fisher
+# 
+# 
+# my_test_fisher$p.value
+# my_test_fisher$estimate
+# 
+# 
+# # box analogy
+# box_analogy_total_cpg <- 1000
+# red_cpg_in_tss <- 200
+# white_cpg_not_in_tss <- 800
+# 
+# # randomly draw 300 balls (DMLs) and count what you observed
+# red_dml_in_tss <- 90
+# white_dml_not_in_tss <- 210
+# 
+# # now we ask the quesion is 90 out of 300 more than what you'd expect by chance?
+# # given only 200 out of 1000 are red...
+# # lets calculate expected # of TSS dmls = 300 * (200/1000) = 60
+# # 90 > 60 but is this difference statistically significant?
+# 
+# p_value <- phyper(90 - 1, 200, 800, 300, lower.tail = FALSE)
+# print(p_value)
+# 
+# box_analogy_CpGs <- data.frame(
+#   CpG_in_tss = c(90, 110), CpG_not_in_tss = c(210, 590),
+#   row.names = c("DML", "Non-DML")
+# )
+# 
+# fisher.test(box_analogy_CpGs)
+# fisher.test(box_analogy_CpGs)$p.value
+```
