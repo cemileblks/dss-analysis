@@ -235,23 +235,33 @@ kable(fisher_combined, caption = "Combined Fisher's test results for hyper- and 
 
 The Fisher's exact tests compare the proportion of hyper- and hypomethylated DMLs within each genomic feature to the background of all tested CpG sites.
 
-Intergenic regions show strong enrichment for both hyper- and hypomethylated DMLs:
-    - Odds Ratios: Hyper = 2.05, Hypo = 1.79
-    - This suggests that DMLs are overrepresented in intergenic regions compared to expected background levels.
+### Intergenic regions
 
-- Exons and 3' UTRs show  depletion of DMLs:
-    - Exons: Hyper = 0.45, Hypo = 0.49
-    - 3' UTRs: Hyper = 0.24, Hypo = 0.50
-    - These odds ratios indicate that DMLs are less likely to occur in coding and 3' regulatory regions.
+Show strong enrichment for both hyper- and hypomethylated DMLs:
+  - Odds Ratios: Hyper = 2.05, Hypo = 1.79
+  - This suggests that DMLs are overrepresented in intergenic regions, relative to the CpG background.
 
-- TSS (transcription start sites) show mild depletion for hyper-DMLs (OR = 0.81), and stronger depletion for hypo-DMLs (OR = 0.33), both statistically significant.
+### Exons, Introns and 3'UTRS
+Show consistent depletion of DMLs:
+  - Exons: Hyper = 0.45, Hypo = 0.49
+  - Introns: Hyper = 0.58, Hypo = 0.69
+  - 3' UTRs: Hyper = 0.24, Hypo = 0.50
+These odds ratios suggest that DMLs are less likely to occur within gene bodies and 3' regulatory elements than expected by chance.
 
-- 5' UTRs show no significant enrichment or depletion:
-    - Hyper odds ratio roughly = 1, and p = 0.74
-    - This suggests that DMLs in 5' UTRs occur at expected background levels.
+### Transcription Start Sites
+Show mild depletion for hyper-DMLs (OR = 0.81) and a stronger depletion for hypo-DMLs (OR = 0.33), both statistically significant.
 
-These results indicate that differential methylation are more frequently found in intergenic regions or introns.
+This indicates that DMLs are less likely to be found in TSS regions, especially hypomethylated ones, suggesting that TSSs are relatively protected from methylation changes.
 
+### 5' UTRs
+Show mixed results:
+
+  - Hyper-DMLs: OR = 1.00, p = 0.74 
+    - no significant difference from background
+  - Hypo-DMLs: OR = 0.43 
+    - significant depletion
+
+This indicates that hypermethylation in 5' UTRs occurs at background levels, while hypomethylation is significantly underrepresented.
 
 ## Tests for overlaps wihtout prececence 
 
@@ -303,13 +313,13 @@ kable(fisher_results_inclusive_hyper, caption = "Fisher's test results for hyper
 
 Fisher's exact tests were performed using both exclusive and inclusive genomic feature overlaps. Odds ratios were very similar across both approaches, meaning a consistent pattern of DML enrichment or depletion.
 
-While p-values differed slightly most liketly due to overlapping feature counts but the overall conclusions remain the same
+While p-values differed slightly most likely due to overlapping feature counts but the overall conclusions remain the same
 
 ## Conclusions
 
 To assess whether differentially methylated loci (DMLs) preferentially occur in specific genomic regions, I performed Fisher's exact tests comparing the distribution of hyper- and hypomethylated DMLs across annotated features relative to the background of all tested CpG sites.
 
-The results showed extremely small p-values for most genomic features, indicating highly significant differences between the observed distribution of DMLs and the background. Based on the odds ratios, DMLs were strongly enriched in intergenic and intronic regions, while significantly depleted in exons, 3' UTRs, and TSS regions.
+The results showed extremely small p-values (0) for most genomic features, indicating highly significant differences between the observed distribution of DMLs and the background. Based on the odds ratios, DMLs were strongly enriched in intergenic regions, while significantly depleted in the majority of the rest of the regions. 
 
 These findings suggest that differential methylation is not randomly distributed throughout the genome, but tends to occur more often in certain genomic features.
 
@@ -324,49 +334,49 @@ Although permutation-based methods could be used in principle to assess the sign
 #   Background = c(492557, 27145793 - 492557), HypoDML = c(11190, 1762487 - 11190),
 #   row.names = c("TSS", "NOT-TSS")
 # )
-# 
+#
 # my_test_fisher <- fisher.test(my_test_df)
 # my_test_fisher
-# 
-# 
+#
+#
 # my_test_fisher$p.value
 # my_test_fisher$estimate
-# 
+#
 # my_test_df <- data.frame(
 #   Background = c(12758595, 27145793 - 12758595), HypoDML = c(1064491, 1762487 - 1064491),
 #   row.names = c("TSS", "NOT-TSS")
 # )
-# 
+#
 # my_test_fisher <- fisher.test(my_test_df)
 # my_test_fisher
-# 
-# 
+#
+#
 # my_test_fisher$p.value
 # my_test_fisher$estimate
-# 
-# 
+#
+#
 # # box analogy
 # box_analogy_total_cpg <- 1000
 # red_cpg_in_tss <- 200
 # white_cpg_not_in_tss <- 800
-# 
+#
 # # randomly draw 300 balls (DMLs) and count what you observed
 # red_dml_in_tss <- 90
 # white_dml_not_in_tss <- 210
-# 
+#
 # # now we ask the quesion is 90 out of 300 more than what you'd expect by chance?
 # # given only 200 out of 1000 are red...
 # # lets calculate expected # of TSS dmls = 300 * (200/1000) = 60
 # # 90 > 60 but is this difference statistically significant?
-# 
+#
 # p_value <- phyper(90 - 1, 200, 800, 300, lower.tail = FALSE)
 # print(p_value)
-# 
+#
 # box_analogy_CpGs <- data.frame(
 #   CpG_in_tss = c(90, 110), CpG_not_in_tss = c(210, 590),
 #   row.names = c("DML", "Non-DML")
 # )
-# 
+#
 # fisher.test(box_analogy_CpGs)
 # fisher.test(box_analogy_CpGs)$p.value
 ```
