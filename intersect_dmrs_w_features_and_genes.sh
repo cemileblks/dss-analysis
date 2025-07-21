@@ -71,7 +71,7 @@ process_dmr_type() {
     for FEATURE in "${FEATURES[@]}"; do
         FEATURE_BED="$ANNOT_DIR/hg38_${FEATURE}.bed"
 
-        INTERSECT_OUT="$OUT_DIR/${TYPE}_dmrs_in_${FEATURE}.tsv"
+        INTERSECT_OUT="$OUT_DIR/${TYPE}_dmrs_in_${FEATURE}.bed"
         GENE_HITS_OUT="$OUT_DIR/${TYPE}_${FEATURE}_gene_hits.tsv"
         GENE_IDS_OUT="$OUT_DIR/${TYPE}_${FEATURE}_gene_ids.txt"
 
