@@ -1,0 +1,189 @@
+---
+title: "Distributions of DMLs and DMRs across genomic features"
+author: "Cemile Balkas"
+date: "2025-07-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Distribution of DMLs and DMRs across genomic features
+
+To investigate where methylation changes occur in the genome, I first quantified the distribution of differentially methylated loci (DMLs) and differentially methylated regions (DMRs) across genomic features such as transcription start sites (TSS), exons, introns, untranslated regions (UTRs), and intergenic regions.
+
+These distributions are based on exclusive feature assignment, where each DML or DMR is assigned to a single genomic feature according to a defined precedence:
+`tss > downstream_1kb > 5'UTRs > 3'UTRs > exons > introns > intergenic
+
+This means overlapping regions are counted only once, and features considered to have greater regulatory relevance, such as promoters and untranslated regions, are prioritised over broader categories like intronic or intergenic regions.
+
+The barplots below show the percentage of total DMLs and DMRs overlapping each genomic feature. Both distributions reveal similar patterns: the majority of methylation changes occur in intergenic and intronic regions, with relatively fewer changes observed in promoter associated (TSS) or UTR regions.
+
+This similarity suggests that the regional distribution of methylation changes is largely consistent whether considering individual CpG sites (DMLs) or aggregated regions (DMRs). These patterns are also maintained when DMRs are separated into hypermethylated and hypomethylated categories.
+
+# Plot feature distribution bar graph
+```{r}
+rotate_x <- function(data, rot_angle, main_title, y_label) {
+  colors <- rainbow(length(data))
+  plt <- barplot(data,
+    xaxt = "n",
+    las = 2,
+    ylim = c(0, max(data) * 1.2),
+    main = main_title,
+    ylab = y_label,
+    col = colors
+  )
+
+  text(plt, par("usr")[3],
+    labels = names(data),
+    srt = rot_angle, adj = c(1.1, 1.1),
+    xpd = TRUE, cex = 0.8
+  )
+  text(plt, data,
+    labels = round(data, 1), # Round to 1 decimal if you like
+    pos = 3, cex = 0.7
+  ) # pos=3 means above bar
+}
+```
+
+# DMLs
+```{r plot-dml-bargraph}
+df_dml_feature_counts <- read.csv("dml_feature_overlap_output/overlap_counts_exclusive.csv")
+total_cpg <- sum(df_dml_feature_counts$All_CpG_Count)
+
+# df_dml_feature_counts$Percent_of_Total_CpGs <- round(100 * df_dml_feature_counts$All_CpG_Count / total_cpg, 2)
+
+# Calculate total DMLs
+df_dml_feature_counts$TotalDMLs <- df_dml_feature_counts$HyperDMLs + df_dml_feature_counts$HypoDMLs
+
+# Compute percentage of total DMLs
+total_dmls <- sum(df_dml_feature_counts$TotalDMLs)
+df_dml_feature_counts$Percent_of_DMLs <- round(100 * df_dml_feature_counts$TotalDMLs / total_dmls, 2)
+# set custom order for the barplots
+custom_order <- c("tss", "5utrs", "exons", "introns", "3utrs", "downstream_1kb", "intergenic")
+
+# Create vector for plotting
+dml_percentages <- setNames(df_dml_feature_counts$Percent_of_DMLs, df_dml_feature_counts$Feature)
+dml_percentages <- dml_percentages[custom_order]
+
+# Use custom plot function
+rotate_x(dml_percentages, rot_angle = 45, main_title = "DML distribution across genomic features", y_label ="Percentage of DMLs (%)")
+```
+
+
+# DMRs
+## Load DMRs in Feature overlap files and visualise in bar graph
+
+```{r plot-feature-dmr-dist}
+# Read the total DMRs file (dss dmr output all dmrs)
+total_dmrs <- nrow(read.delim("HG38_24_06_2025_HCT116_3BKO_TIDY_VS_HCT116_WT_TIDY_DMRs.bed", header = FALSE))
+
+# Get list of overlap files (from the bash script that overlapped dmrs with genomic features using bedtools)
+# overlap_dir <- "dmr_only_feature_overlaps"
+overlap_dir <- "dmr_only_feature_overlaps_exclusive"
+files <- list.files(overlap_dir, pattern = "^all_dmrs_in_.*\\.bed$", full.names = TRUE)
+
+# Count overlaps
+dmr_counts <- sapply(files, function(file) {
+  nrow(read.delim(file, header = FALSE))
+})
+
+# Extract and clean feature names
+names(dmr_counts) <- gsub("^all_dmrs_in_|\\.bed$", "", basename(names(dmr_counts)))
+
+# Define order for plot
+custom_order <- c("tss", "5utrs", "exons", "introns", "3utrs", "downstream_1kb", "intergenic")
+
+# Calculate percentages
+dmr_percentages <- round(100 * dmr_counts / total_dmrs, 2)
+
+# Reorder the dmr_percentages vector
+dmr_percentages <- dmr_percentages[custom_order]
+
+# Clean feature names
+names(dmr_counts) <- gsub("^all_dmrs_in_|\\.bed$", "", basename(names(dmr_counts)))
+
+# png(filename="analysis_results/DMR_genomic_feature_distribution.png", width = 600, height = 380)
+
+# Plot with the custom rotate_x function
+rotate_x(dmr_percentages, rot_angle = 45, main_title = "DMR distribution across genomic features", y_label ="Percentage of DMRs (%)")
+
+# dev.off()
+
+```
+
+```{r plot-feature-dmr-hyper}
+# Read the total DMRs file (dss dmr output all dmrs)
+total_hyper_dmrs <- nrow(read.delim("HG38_24_06_2025_HCT116_3BKO_TIDY_VS_HCT116_WT_TIDY_DMRs_HYPER.bed", header = FALSE))
+
+# Get list of overlap files (from the bash script that overlapped dmrs with genomic features using bedtools)
+overlap_dir <- "dmr_feature_overlaps_exclusive"
+hyper_files <- list.files(overlap_dir, pattern = "^hyper_dmrs_in_.*\\.bed$", full.names = TRUE)
+# Count overlaps
+dmr_counts <- sapply(hyper_files, function(file) {
+  nrow(read.delim(file, header = FALSE))
+})
+
+# Extract and clean feature names
+names(dmr_counts) <- gsub("^hyper_dmrs_in_|\\.bed$", "", basename(names(dmr_counts)))
+
+# Define order for plot
+custom_order <- c("tss", "5utrs", "exons", "introns", "3utrs", "downstream_1kb", "intergenic")
+
+# Calculate percentages
+dmr_percentages <- round(100 * dmr_counts / total_hyper_dmrs, 2)
+
+# Reorder the dmr_percentages vector
+dmr_percentages <- dmr_percentages[custom_order]
+
+# Clean feature names
+names(dmr_counts) <- gsub("^hyper_dmrs_in_|\\.bed$", "", basename(names(dmr_counts)))
+
+# png(filename="analysis_results/DMR_HYPER_genomic_feature_distribution.png", width = 600, height = 380)
+
+# Plot with the custom rotate_x function
+rotate_x(dmr_percentages, rot_angle = 45, main_title = "Hypermethylated DMR distribution across genomic features", y_label ="Percentage of Hypermethylated DMRs (%)")
+
+# dev.off()
+
+```
+
+
+```{r plot-feature-dmr-hypo}
+# Read the total DMRs file (dss dmr output all dmrs)
+total_hypo_dmrs <- nrow(read.delim("HG38_24_06_2025_HCT116_3BKO_TIDY_VS_HCT116_WT_TIDY_DMRs_HYPO.bed", header = FALSE))
+
+# Get list of overlap files (from the bash script that overlapped dmrs with genomic features using bedtools)
+overlap_dir <- "dmr_feature_overlaps_exclusive"
+hypo_files <- list.files(overlap_dir, pattern = "^hypo_dmrs_in_.*\\.bed$", full.names = TRUE)
+# Count overlaps
+dmr_counts <- sapply(hypo_files, function(file) {
+  nrow(read.delim(file, header = FALSE))
+})
+
+# Extract and clean feature names
+names(dmr_counts) <- gsub("^hypo_dmrs_in_|\\.bed$", "", basename(names(dmr_counts)))
+
+# Define order for plot
+custom_order <- c("tss", "5utrs", "exons", "introns", "3utrs", "downstream_1kb", "intergenic")
+
+# Calculate percentages
+dmr_percentages <- round(100 * dmr_counts / total_hypo_dmrs, 2)
+
+# Reorder the dmr_percentages vector
+dmr_percentages <- dmr_percentages[custom_order]
+
+# Clean feature names
+names(dmr_counts) <- gsub("^hypo_dmrs_in_|\\.bed$", "", basename(names(dmr_counts)))
+
+# png(filename="analysis_results/DMR_HYPER_genomic_feature_distribution.png", width = 600, height = 380)
+
+# Plot with the custom rotate_x function
+rotate_x(dmr_percentages, rot_angle = 45, main_title = "Hypomethlated DMR distribution across genomic features", y_label ="Percentage of Hypermethylated DMRs (%)")
+
+# dev.off()
+
+```
+
+
