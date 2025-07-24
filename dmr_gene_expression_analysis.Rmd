@@ -24,6 +24,8 @@ library("clusterProfiler")
 library("tidyverse")
 library("enrichplot")
 library("biomaRt")
+library(ggpubr)
+
 ```
 
 ## Load DESeq2 Results
@@ -31,65 +33,6 @@ library("biomaRt")
 ```{r load-differential-expression-table}
 de <- read.table(file = "Deseq2_Genotype_DNMT3B_vs_WT_sval_annot_190623.txt", sep = "\t", header = TRUE)
 nrow(de)
-```
-
-## Load DMRs in Feature overlap files and visualise in bar graph
-
-```{r plot-feature-dmr-dist}
-# Read the total DMRs file (dss dmr output all dmrs)
-total_dmrs <- nrow(read.delim("HG38_24_06_2025_HCT116_3BKO_TIDY_VS_HCT116_WT_TIDY_DMRs.bed", header = FALSE))
-
-# Get list of overlap files (from the bash script that overlapped dmrs with genomic features using bedtools)
-overlap_dir <- "dmr_only_feature_overlaps"
-files <- list.files(overlap_dir, pattern = "^all_dmrs_in_.*\\.tsv$", full.names = TRUE)
-
-# Count overlaps
-dmr_counts <- sapply(files, function(file) {
-  nrow(read.delim(file, header = FALSE))
-})
-
-# Extract and clean feature names
-names(dmr_counts) <- gsub("^all_dmrs_in_|\\.tsv$", "", basename(names(dmr_counts)))
-
-# Define order for plot
-custom_order <- c("downstream_1kb", "tss", "5utrs", "3utrs", "exons", "introns", "intergenic")
-
-# Calculate percentages
-dmr_percentages <- round(100 * dmr_counts / total_dmrs, 2)
-
-# Reorder the dmr_percentages vector
-dmr_percentages <- dmr_percentages[custom_order]
-
-# Clean feature names
-names(dmr_counts) <- gsub("^all_dmrs_in_|\\.tsv$", "", basename(names(dmr_counts)))
-
-rotate_x <- function(data, rot_angle) {
-  colors <- rainbow(length(data))
-  plt <- barplot(data,
-    xaxt = "n",
-    las = 2,
-    ylim = c(0, max(data) * 1.2),
-    main = "DMR distribution across genomic features",
-    ylab = "Percentage of DMRs",
-    col = colors
-  )
-
-  text(plt, par("usr")[3],
-    labels = names(data),
-    srt = rot_angle, adj = c(1.1, 1.1),
-    xpd = TRUE, cex = 0.8
-  )
-  text(plt, data,
-    labels = round(data, 1), # Round to 1 decimal if you like
-    pos = 3, cex = 0.7
-  ) # pos=3 means above bar
-}
-
-# Plot with the custom rotate_x function
-rotate_x(dmr_percentages, rot_angle = 45)
-
-# Note: the percentages are not exclusive, one DMR may be overlapping with more than one region
-# Percentages add up to 112.8...
 ```
 
 ## Load DMR Gene Lists
@@ -100,18 +43,20 @@ rotate_x(dmr_percentages, rot_angle = 45)
 # group of gene ids with hyper methylated exons
 # group of genes with hyoo methlated introns etc etc.
 gene_list_files <- list(
-  "hyper_tss" = "dmr_feature_gene_mapping_output/hyper_tss_gene_ids.txt",
-  "hyper_exons" = "dmr_feature_gene_mapping_output/hyper_exons_gene_ids.txt",
-  "hyper_introns" = "dmr_feature_gene_mapping_output/hyper_introns_gene_ids.txt",
-  "hyper_3utrs" = "dmr_feature_gene_mapping_output/hyper_3utrs_gene_ids.txt",
-  "hyper_5utrs" = "dmr_feature_gene_mapping_output/hyper_5utrs_gene_ids.txt",
-  "hyper_downstream_1kb" = "dmr_feature_gene_mapping_output/hyper_downstream_1kb_gene_ids.txt",
-  "hypo_tss" = "dmr_feature_gene_mapping_output/hypo_tss_gene_ids.txt",
-  "hypo_exons" = "dmr_feature_gene_mapping_output/hypo_exons_gene_ids.txt",
-  "hypo_introns" = "dmr_feature_gene_mapping_output/hypo_introns_gene_ids.txt",
-  "hypo_3utrs" = "dmr_feature_gene_mapping_output/hypo_3utrs_gene_ids.txt",
-  "hypo_5utrs" = "dmr_feature_gene_mapping_output/hypo_5utrs_gene_ids.txt",
-  "hypo_downstream_1kb" = "dmr_feature_gene_mapping_output/hypo_downstream_1kb_gene_ids.txt"
+  "hyper_tss" = "dmr_feature_overlaps_exclusive/hyper_tss_gene_ids.txt",
+  "hyper_exons" = "dmr_feature_overlaps_exclusive/hyper_exons_gene_ids.txt",
+  "hyper_introns" = "dmr_feature_overlaps_exclusive/hyper_introns_gene_ids.txt",
+  "hyper_3utrs" = "dmr_feature_overlaps_exclusive/hyper_3utrs_gene_ids.txt",
+  "hyper_5utrs" = "dmr_feature_overlaps_exclusive/hyper_5utrs_gene_ids.txt",
+  "hyper_downstream_1kb" = "dmr_feature_overlaps_exclusive/hyper_downstream_1kb_gene_ids.txt",
+  # "hyper_intergenic" = "dmr_feature_overlaps_exclusive/hyper_intergenic_gene_ids.txt",
+  "hypo_tss" = "dmr_feature_overlaps_exclusive/hypo_tss_gene_ids.txt",
+  "hypo_exons" = "dmr_feature_overlaps_exclusive/hypo_exons_gene_ids.txt",
+  "hypo_introns" = "dmr_feature_overlaps_exclusive/hypo_introns_gene_ids.txt",
+  "hypo_3utrs" = "dmr_feature_overlaps_exclusive/hypo_3utrs_gene_ids.txt",
+  "hypo_5utrs" = "dmr_feature_overlaps_exclusive/hypo_5utrs_gene_ids.txt",
+  "hypo_downstream_1kb" = "dmr_feature_overlaps_exclusive/hypo_downstream_1kb_gene_ids.txt"
+  # "hypo_intergenic" = "dmr_feature_overlaps_exclusive/hypo_intergenic_gene_ids.txt"
 )
 
 # Load into a named list of dataframes
@@ -120,7 +65,7 @@ gene_groups <- lapply(gene_list_files, read_lines)
 
 ## Compare Log2FC Distributions
 
-```{r log2fc-distributions}
+```{r log2fc-distributions-simple}
 # combine all gene lists (tss, introns etc) into one big table with labels
 plot_df <- bind_rows(
   lapply(names(gene_groups), function(group_name) {
@@ -130,21 +75,69 @@ plot_df <- bind_rows(
   left_join(de, by = "Ensembl_id") %>% # Join with DE results (log2FC etc.) on Ensembl gene ID
   filter(!is.na(log2FoldChange.y)) # Keep only genes that are in the DESeq2 results
 
-# Plot the log2FC distributions per DMR group
-# These each of the groups may include the same gene more than once...
-ggplot(plot_df, aes(x = group, y = log2FoldChange.y, fill = group)) +
+# define the order for the plots
+hyper_features <- c(
+  "hyper_tss", "hyper_5utrs", "hyper_exons", 
+  "hyper_introns", "hyper_3utrs", "hyper_downstream_1kb"
+)
+
+hypo_features  <- c(
+  "hypo_tss", "hypo_5utrs", "hypo_exons",
+  "hypo_introns", "hypo_3utrs", "hypo_downstream_1kb")
+
+# Filter the plot_df for only the genes that are in each the group
+plot_df_hyper <- plot_df %>% filter(group %in% hyper_features)
+plot_df_hypo <- plot_df %>% filter(group %in% hypo_features)
+
+
+# Set factor levels to change the order of the features in plots
+plot_df_hyper <- plot_df_hyper %>%
+  mutate(group = factor(group, levels = hyper_features))
+plot_df_hypo  <- plot_df_hypo %>%
+  mutate(group = factor(group, levels = hypo_features))
+
+custom_colors <- c(
+  "hyper_tss" = "#c00606", "hypo_tss" = "#c00606",
+  "hyper_5utrs" = "#ffdb00", "hypo_5utrs" = "#ffdb00",
+  "hyper_exons" = "#49ff00", "hypo_exons" = "#49ff00",
+  "hyper_introns" = "#00ff92", "hypo_introns" = "#00ff92",
+  "hyper_3utrs" = "#0092ff", "hypo_3utrs" = "#0092ff",
+  "hyper_downstream_1kb" = "#3406ab", "hypo_downstream_1kb" = "#3406ab"
+)
+
+# Hyper plot
+ggplot(plot_df_hyper, aes(x = group, y = log2FoldChange.y, fill = group)) +
   geom_boxplot(outlier.shape = NA, alpha = 0.8) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
   coord_cartesian(ylim = c(-8, 8)) +
+  scale_fill_manual(values = custom_colors) +
   labs(
-    title = "log2FoldChange by DMR Group",
+    title = "log2FoldChange of Hypermethylated DMR Groups",
     x = "DMR Feature Group",
     y = "log2FoldChange (3BKO vs WT)"
   ) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    legend.position = "none"
+  ) 
+# Hypo plot
+ggplot(plot_df_hypo, aes(x = group, y = log2FoldChange.y, fill = group)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  coord_cartesian(ylim = c(-8, 8)) +
+  scale_fill_manual(values = custom_colors) +
+  labs(
+    title = "log2FoldChange of Hypomethylated DMR Groups",
+    x = "DMR Feature Group",
+    y = "log2FoldChange (3BKO vs WT)"
+  ) +
+  theme_classic() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
     legend.position = "none"
   )
+
 ```
 From this plot it can be seen that the hyper_tss group shows negative median log2FC suggesting that genes with hypermethylated TSSs are often down regulated in the KO dataset. (This is consistent with what we expected to see as it is widely accepted that mehtylation in promoters represses transcription)
 
@@ -153,6 +146,162 @@ From this plot it can be seen that the hyper_tss group shows negative median log
 However there is only slight increase in expression levels in the hypo_tss group, could this mean loss in methylation at TSS of genes does not necesarrily increase the expression levels of those genes???
 
 Rest of the groups hover around 0 not showing any extreme biases in changes in expression levels. The variance in most box plots also seem to tight except the hyper_tss group.
+
+
+# Wilcoxon rank-sum test
+
+Are the log2FoldChanges for genes with, hypermethylated TSSs systematically different from other genes?
+
+```{r rank-sum-test-sinlge group}
+
+# Compare log2FCs of "hyper_tss" to all other DMR-associated genes
+group <- "hyper_tss"
+
+group_values <- plot_df$log2FoldChange.y[plot_df$group == group]
+# rest_values  <- plot_df$log2FoldChange.y[plot_df$group != group]
+
+test <- wilcox.test(group_values, de_autosomal_protein_coding$log2FoldChange.y, alternative = "two.sided")
+
+test
+
+```
+
+
+```{r wilcoxon-rank-sum-test-all}
+# Filter DESeq2 results to only protein-coding genes and cannonical autosomes for the test as a background
+autosomes <- as.character(1:22)
+
+de_autosomal_protein_coding <- de %>%
+  filter(gene_biotype == "protein_coding" & chromosome_name %in% autosomes)
+
+# df for test results
+wilcox_results <- lapply(unique(plot_df$group), function(g) {
+  group_values <- plot_df$log2FoldChange.y[plot_df$group == g]
+  background_values  <- de_autosomal_protein_coding$log2FoldChange.y
+
+  test <- wilcox.test(group_values, background_values, alternative = "two.sided")
+
+  tibble(
+    group = g,
+    p_value = test$p.value,
+    median_log2FC = median(group_values),
+    n = length(group_values)
+  )
+}) %>% bind_rows()
+
+wilcox_results <- wilcox_results %>%
+  mutate(p_adj = p.adjust(p_value, method = "BH"))
+
+wilcox_results %>%
+  arrange(p_adj) %>%
+  mutate(significance = case_when(
+    # p_adj <= 0.0001 ~ "****",
+    p_adj <= 0.001 ~ "***",
+    p_adj <= 0.01  ~ "**",
+    p_adj <= 0.05  ~ "*",
+    TRUE          ~ "ns"
+  ))
+
+```
+```{r fold-change-plots with p values}
+autosomes <- as.character(1:22)
+
+de_autosomal_protein_coding <- de %>%
+  filter(gene_biotype == "protein_coding" & chromosome_name %in% autosomes)
+
+background_df <- de_autosomal_protein_coding %>%
+  mutate(group = "background") %>%
+  dplyr::select(Ensembl_id, log2FoldChange.y, group)
+
+# subset the data frames to columns needed
+plot_df_hypo_subset <- plot_df %>%
+  filter(group %in% hypo_features) %>%
+  dplyr::select(Ensembl_id, log2FoldChange.y, group)
+
+plot_df_hyper_subset <- plot_df %>%
+  filter(group %in% hyper_features) %>%
+  dplyr::select(Ensembl_id, log2FoldChange.y, group)
+
+combined_df_hypo <- bind_rows(plot_df_hypo_subset, background_df)
+combined_df_hyper <- bind_rows(plot_df_hyper_subset, background_df)
+
+# Set group order for plotting
+combined_df_hypo$group <- factor(combined_df_hypo$group, levels = c("background", hypo_features))
+combined_df_hyper$group <- factor(combined_df_hyper$group, levels = c("background", hyper_features))
+
+# Plot for hyper features -----------------------------------------------------
+pvals_df <- lapply(hyper_features, function(g) {
+  test <- wilcox.test(
+    combined_df_hyper$log2FoldChange.y[combined_df_hyper$group == g],
+    combined_df_hyper$log2FoldChange.y[combined_df_hyper$group == "background"]
+  )
+  data.frame(group1 = "background", group2 = g, p = test$p.value)
+}) %>% bind_rows()
+
+pvals_df <- pvals_df %>%
+  mutate(
+    y.position = 6,
+    p.label = ifelse(p < 2e-16, "p = <2e-16", sprintf("p = %.3g", p))
+  )
+
+ggboxplot(
+  data = combined_df_hyper %>% filter(group != "background"),
+  x = "group", y = "log2FoldChange.y", fill = "group", outlier.shape = NA
+) +
+  scale_fill_manual(values = custom_colors) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  coord_cartesian(ylim = c(-8, 8)) +
+  labs(
+    title = "log2FoldChange of Hypermethylated DMR Groups",
+    x = "DMR Feature Group",
+    y = "log2FoldChange (3BKO vs WT)"
+  ) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    legend.position = "none"
+  ) +
+  stat_pvalue_manual(pvals_df, label = "p.label", xmin = "group2", xmax = "group2")
+
+# Plot for hypo features --------------------------------------------------------------
+pvals_df <- lapply(hypo_features, function(g) {
+  test <- wilcox.test(
+    combined_df_hypo$log2FoldChange.y[combined_df_hypo$group == g],
+    combined_df_hypo$log2FoldChange.y[combined_df_hypo$group == "background"]
+  )
+  data.frame(group1 = "background", group2 = g, p = test$p.value)
+}) %>% bind_rows()
+
+pvals_df <- pvals_df %>%
+  mutate(
+    y.position = 6,
+    p.label = ifelse(p < 2e-16, "p = <2e-16", sprintf("p = %.3g", p))
+  )
+
+ggboxplot(
+  data = combined_df_hypo %>% filter(group != "background"),
+  x = "group", y = "log2FoldChange.y", fill = "group", outlier.shape = NA
+) +
+  scale_fill_manual(values = custom_colors) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  coord_cartesian(ylim = c(-8, 8)) +
+  labs(
+    title = "log2FoldChange of Hypomethylated DMR Groups",
+    x = "DMR Feature Group",
+    y = "log2FoldChange (3BKO vs WT)"
+  ) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    legend.position = "none"
+  ) +
+  stat_pvalue_manual(pvals_df, label = "p.label", xmin = "group2", xmax = "group2")
+
+
+```
+
+
+
 
 ## How many genes are there per group? 
 ## How many are up/down regulated 
@@ -314,7 +463,7 @@ ora_hyper_5utrs_down <- enrichGO(
   OrgDb         = org.Hs.eg.db,
   keyType       = "ENSEMBL",
   ont           = "CC",
-  pAdjustMethod = "BP",
+  pAdjustMethod = "BH",
   qvalueCutoff  = 0.1,
   readable      = TRUE,
   pool          = FALSE
@@ -336,7 +485,7 @@ if (nrow(ora_hyper_5utrs_down_simplified@result) > 0) {
 
 For downregulated genes associated with hypermethylated exons, no significant enrichment was found in the Molecular Function (MF) or Cellular Component (CC) categories. In the Biological Process (BP) category, enrichment was observed for terms related to extracellular matrix organisation & epithelial cell proliferation. 
 
-This could mean that hypermethylation in exons may be linked to the repression of genes involved in structural tissue organization and cell growth??? 
+This could mean that hypermethylation in exons may be linked to the repression of genes involved in structural tissue organisation and cell growth??? 
 
 ```{r}
 # Top 10 genes that are most significantly down-regulated with hyper_tss
@@ -500,6 +649,53 @@ emapplot(ora_overlap_downregulated_bp, color = "qvalue")
 # } else {
 #   message("No significant enrichment results to plot.")
 # }
+```
+
+
+
+## Hyper-DMVs/ Downregulated genes
+
+DMVs -> normally are low in methyaltion and are associated with developmental genes and enriched with transcription factor binding sites, so open to transcription normally.
+
+After Dnmt3b knockout, some regions inside DMVs gained methylation (hyper-DMRs).
+
+From the DMR feature group comparison, I noticed that genes associated with hyper_dmvs had visible downregulation because the median log2FC more in the negative side. 
+
+Since DMVs are normally unmethylated and often regulate developmental genes, I wanted to know whether this downregulation was because the DMRs were at promoters, or whether methylation in other parts of DMVs could be repressing gene expression.
+
+I checked how many of the downregulated DMV genes were also part of the hyper_tss group.Out of 31 downregulated DMV genes, only 13 (around 42%) also had hypermethylated promoters so other regions being hypermethyalted could have also contributed to their downregulation?
+
+```{r}
+# # Count how many downregulated and hyper mehtylated genes in DMVs are also in hyper-TSS group
+# length(intersect(dmr_gene_expression$hyper_dmvs$down$Ensembl_id, dmr_gene_expression$hyper_tss$down$Ensembl_id))
+# # 13 genes
+# 
+# dmr_gene_expression$hyper_dmvs$down$external_gene_name %>% head(n = 20)
+# 
+# # GO enrichment for the 31 downregulated DMV genes
+# ora_hyper_dmvs_down_bp <- enrichGO(
+#   gene          = dmr_gene_expression$hyper_dmvs$down$Ensembl_id,
+#   universe      = universe_genes,
+#   OrgDb         = org.Hs.eg.db,
+#   keyType       = "ENSEMBL",
+#   ont           = "BP",
+#   pAdjustMethod = "BH",
+#   qvalueCutoff  = 0.05,
+#   readable      = TRUE,
+#   pool          = FALSE
+# )
+# 
+# # Simplify and check results
+# ora_hyper_dmvs_down_simplified_bp <- clusterProfiler::simplify(ora_hyper_dmvs_down_bp)
+# head(ora_hyper_dmvs_down_simplified_bp@result)
+# 
+# # Plot if there are results
+# if (nrow(ora_hyper_dmvs_down_simplified_bp@result) > 0) {
+#   dotplot(ora_hyper_dmvs_down_simplified_bp)
+# } else {
+#   message("No significant enrichment results to plot.")
+# }
+
 ```
 
 
