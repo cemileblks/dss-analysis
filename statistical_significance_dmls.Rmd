@@ -235,6 +235,87 @@ kable(fisher_combined, caption = "Combined Fisher's test results for hyper- and 
 
 The Fisher's exact tests compare the proportion of hyper- and hypomethylated DMLs within each genomic feature to the background of all tested CpG sites.
 
+```{r}
+# Add DML type column if not already present
+fisher_results_hyper$DML_Type <- "hyper"
+fisher_results_hypo$DML_Type <- "hypo"
+
+# Replace all p-values < 2.2e-16 with display value
+fisher_results_hyper$p_display <- ifelse(fisher_results_hyper$p_value < 2.2e-16, "p<2.2e-16",
+                                         paste0("p=", formatC(fisher_results_hyper$p_value, format = "e", digits = 2)))
+
+fisher_results_hypo$p_display <- ifelse(fisher_results_hypo$p_value < 2.2e-16, "p<2.2e-16",
+                                         paste0("p=", formatC(fisher_results_hyper$p_value, format = "e", digits = 2)))
+
+# Rename bar column names 
+label_map <- c(
+  tss = "TSS",
+  `5utrs` = "5′ UTR",
+  exons = "Exons",
+  introns = "Introns",
+  `3utrs` = "3′ UTR",
+  downstream_1kb = "Downstream (1kb)",
+  intergenic = "Intergenic"
+)
+
+# Apply to both dataframes
+fisher_results_hyper$FeatureLabel <- label_map[as.character(fisher_results_hyper$Feature)]
+fisher_results_hypo$FeatureLabel <- label_map[as.character(fisher_results_hypo$Feature)]
+
+# Set factor order for feature
+ordered_labels <- label_map[feature_order]
+fisher_results_hyper$FeatureLabel <- factor(fisher_results_hyper$FeatureLabel, levels = ordered_labels)
+fisher_results_hypo$FeatureLabel  <- factor(fisher_results_hypo$FeatureLabel, levels = ordered_labels)
+
+custom_colors <- c(
+  "tss" = "#c00606",
+  "5utrs" = "#ffdb00",
+  "exons" = "#49ff00",
+  "introns" = "#00ff92",
+  "3utrs" = "#0092ff",
+  "downstream_1kb" = "#3406ab",
+  "intergenic" = "#ff8ad8"
+)
+
+ggplot(fisher_results_hyper, aes(x = FeatureLabel, y = OddsRatio, fill = Feature)) +
+  geom_bar(stat = "identity", width = 0.8, lwd = 0.4, color = "black") +
+  geom_text(aes(label = p_display), vjust = -0.5, size = 3.5) +
+  coord_cartesian(ylim = c(0, 2.1)) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray40") +
+  scale_fill_manual(values = custom_colors) +
+  labs(
+    title = "Fold Enrichment of Hyper-DMLs by Genomic Feature",
+    x = "Genomic Feature",
+    y = "Fold Enrichment"
+  ) +
+  theme_classic(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  )
+ggsave("analysis_results/Fold_enrichment_hyper_dmls_in_features.png")
+
+
+ggplot(fisher_results_hypo, aes(x = FeatureLabel, y = OddsRatio, fill = Feature)) +
+  geom_bar(stat = "identity", width = 0.8, lwd = 0.4, color = "black") +
+  geom_text(aes(label = p_display), vjust = -0.5, size = 3.5) +
+  coord_cartesian(ylim = c(0, 2.1)) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray40") +
+  scale_fill_manual(values = custom_colors) +
+  labs(
+    title = "Fold Enrichment of Hypo-DMLs by Genomic Feature",
+    x = "Genomic Feature",
+    y = "Fold Enrichment"
+  ) +
+  theme_classic(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  )
+ggsave("analysis_results/Fold_enrichment_hypo_dmls_in_features.png")
+
+
+```
 ### Intergenic regions
 
 Show strong enrichment for both hyper- and hypomethylated DMLs:
