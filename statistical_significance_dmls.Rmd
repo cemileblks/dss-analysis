@@ -275,9 +275,9 @@ fisher_results_hyper$FeatureLabel <- label_map[as.character(fisher_results_hyper
 fisher_results_hypo$FeatureLabel <- label_map[as.character(fisher_results_hypo$Feature)]
 
 # Set factor order for feature
-ordered_labels <- label_map[feature_order]
-fisher_results_hyper$FeatureLabel <- factor(fisher_results_hyper$FeatureLabel, levels = ordered_labels)
-fisher_results_hypo$FeatureLabel  <- factor(fisher_results_hypo$FeatureLabel, levels = ordered_labels)
+feature_order <- c("TSS", "5′ UTR", "Exons", "Introns", "3′ UTR", "Downstream (1kb)", "Intergenic")
+fisher_results_hyper$FeatureLabel <- factor(fisher_results_hyper$FeatureLabel, levels = feature_order)
+fisher_results_hypo$FeatureLabel  <- factor(fisher_results_hypo$FeatureLabel, levels = feature_order)
 
 custom_colors <- c(
   "tss" = "#c00606",
@@ -291,39 +291,43 @@ custom_colors <- c(
 
 ggplot(fisher_results_hyper, aes(x = FeatureLabel, y = FoldEnrichment, fill = Feature)) +
   geom_bar(stat = "identity", width = 0.8, lwd = 0.4, color = "black") +
-  geom_text(aes(label = p_display), vjust = -0.5, size = 3.5) +
+  geom_text(aes(label = p_display), vjust = -0.5, size = 2.75) +
   coord_cartesian(ylim = c(0, 1.5)) +
   geom_hline(yintercept = 1, linetype = "dashed", color = "gray40") +
   scale_fill_manual(values = custom_colors) +
   labs(
-    title = "Fold Enrichment of Hyper-DMLs by Genomic Feature",
+    title = "Fold Enrichment of Hyper-DMLs\nby Genomic Feature",
     x = "Genomic Feature",
     y = "Fold Enrichment"
   ) +
   theme_classic(base_size = 11) +
   theme(
+    plot.title = element_text(hjust = 0.5, colour = "#CD2626"),
     axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(t = 10, r = 10, b = 10, l = 10),
     legend.position = "none"
   )
-ggsave("analysis_results/Fold_enrichment_hyper_dmls_in_features.png")
+ggsave("analysis_results/Fold_enrichment_hyper_dmls_in_features.png", width = 5, height = 6, units = "in")
 
 ggplot(fisher_results_hypo, aes(x = FeatureLabel, y = FoldEnrichment, fill = Feature)) +
   geom_bar(stat = "identity", width = 0.8, lwd = 0.4, color = "black") +
-  geom_text(aes(label = p_display), vjust = -0.5, size = 3.5) +
+  geom_text(aes(label = p_display), vjust = -0.5, size = 2.75) +
   coord_cartesian(ylim = c(0, 1.5)) +
   geom_hline(yintercept = 1, linetype = "dashed", color = "gray40") +
   scale_fill_manual(values = custom_colors) +
   labs(
-    title = "Fold Enrichment of Hypo-DMLs by Genomic Feature",
+    title = "Fold Enrichment of Hypo-DMLs\nby Genomic Feature",
     x = "Genomic Feature",
     y = "Fold Enrichment"
   ) +
   theme_classic(base_size = 11) +
   theme(
+    plot.title = element_text(hjust = 0.5, color = "#3A5FCD"),
     axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(t = 10, r = 10, b = 10, l = 10),
     legend.position = "none"
   )
-ggsave("analysis_results/Fold_enrichment_hypo_dmls_in_features.png")
+ggsave("analysis_results/Fold_enrichment_hypo_dmls_in_features.png", width = 5, height = 6, units = "in")
 
 
 ```
@@ -354,6 +358,54 @@ Show mixed results:
     - significant depletion
 
 This indicates that hypermethylation in 5' UTRs occurs at background levels, while hypomethylation is significantly underrepresented.
+
+```{r table-for-thesis-appendix}
+# Round Odds Ratio and Fold Enrichment to 2 decimals
+fisher_results_hyper$`Odds Ratio` <- round(fisher_results_hyper$OddsRatio, 2)
+fisher_results_hyper$`Fold Enrichment` <- round(fisher_results_hyper$FoldEnrichment, 2)
+
+fisher_results_hypo$`Odds Ratio` <- round(fisher_results_hypo$OddsRatio, 2)
+fisher_results_hypo$`Fold Enrichment` <- round(fisher_results_hypo$FoldEnrichment, 2)
+
+# Update p-values again just to ensure format
+fisher_results_hyper$p_display <- ifelse(
+  fisher_results_hyper$p_value < 2.2e-16,
+  "<2.2 × 10⁻¹⁶",
+  formatC(fisher_results_hyper$p_value, format = "e", digits = 2)
+)
+
+fisher_results_hypo$p_display <- ifelse(
+  fisher_results_hypo$p_value < 2.2e-16,
+  "<2.2 × 10⁻¹⁶",
+  formatC(fisher_results_hypo$p_value, format = "e", digits = 2)
+)
+
+# Build clean tables
+hyper_table <- fisher_results_hyper[, c("FeatureLabel", "CpG_count", "Hyper_dmls", "p_display", "Odds Ratio", "Fold Enrichment")]
+colnames(hyper_table) <- c("Feature", "CpG Count", "Hyper DMLs", "P-value", "Odds Ratio", "Fold Enrichment")
+
+hypo_table <- fisher_results_hypo[, c("FeatureLabel", "CpG_count", "Hypo_dmls", "p_display", "Odds Ratio", "Fold Enrichment")]
+colnames(hypo_table) <- c("Feature", "CpG Count", "Hypo DMLs", "P-value", "Odds Ratio", "Fold Enrichment")
+
+# Define the desired order
+feature_order <- c("TSS", "5′ UTR", "Exons", "Introns", "3′ UTR", "Downstream (1kb)", "Intergenic")
+
+# Apply order to both tables
+hyper_table$Feature <- factor(hyper_table$Feature, levels = feature_order)
+hypo_table$Feature  <- factor(hypo_table$Feature,  levels = feature_order)
+
+# Sort the data frames by the ordered factor
+hyper_table <- hyper_table[order(hyper_table$Feature), ]
+hypo_table  <- hypo_table[order(hypo_table$Feature), ]
+
+
+# View tables
+kable(hyper_table, caption = "Fisher’s Test Results for Hypermethylated DMLs")
+kable(hypo_table, caption = "Fisher’s Test Results for Hypomethylated DMLs")
+
+
+```
+
 
 ## Tests for overlaps wihtout prececence 
 
