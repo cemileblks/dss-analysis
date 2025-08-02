@@ -170,6 +170,8 @@ for (i in 1:nrow(df_dml_feature_counts)) {
 
   fisher_results_hyper <- rbind(fisher_results_hyper, data.frame(
     Feature = df_dml_feature_counts$Feature[i],
+    CpG_count = total_cpg_in_feature,
+    Hyper_dmls = total_hyper_dmls_in_feature,
     p_value = fisher_pval,
     OddsRatio = odds_ratio
   ))
@@ -213,6 +215,8 @@ for (i in 1:nrow(df_dml_feature_counts)) {
 
   fisher_results_hypo <- rbind(fisher_results_hypo, data.frame(
     Feature = df_dml_feature_counts$Feature[i],
+    CpG_count = total_cpg_in_feature,
+    Hypo_dmls = total_hypo_dmls_in_feature,
     p_value = fisher_pval,
     OddsRatio = odds_ratio
   ))
@@ -221,16 +225,24 @@ for (i in 1:nrow(df_dml_feature_counts)) {
 kable(fisher_results_hypo, caption = "Fisher's test results for hypomethylated DMLs (exclusive features)")
 ```
 
-```{r combine-test-results}
-# Rename columns for clarity before merging
-names(fisher_results_hyper) <- c("Feature", "Hyper_p", "Hyper_Odds")
-names(fisher_results_hypo) <- c("Feature", "Hypo_p", "Hypo_Odds")
+```{r fold-enrichment}
+fe_hyper <- c()
+for (i in 1:nrow(fisher_results_hyper)) {
+  fold_enrichment = (fisher_results_hyper$Hyper_dmls[i] / total_hyper_dmls) / (fisher_results_hyper$CpG_count[i] / total_cpg)
+  print(fold_enrichment)
+  fe_hyper <- c(fe_hyper, fold_enrichment)
+}
 
-# Merge on Feature
-fisher_combined <- merge(fisher_results_hyper, fisher_results_hypo, by = "Feature")
+fisher_results_hyper$FoldEnrichment <- fe_hyper
 
-# View combined results
-kable(fisher_combined, caption = "Combined Fisher's test results for hyper- and hypomethylated DMLs (exclusive features)")
+fe_hypo <- c()
+for(i in 1:nrow(fisher_results_hypo)) {
+  fold_enrichment = (fisher_results_hypo$Hypo_dmls[i] / total_hypo_dmls) / (fisher_results_hypo$CpG_count[i] / total_cpg)
+  fe_hypo <- c(fe_hypo, fold_enrichment)
+}
+
+fisher_results_hypo$FoldEnrichment <- fe_hypo
+
 ```
 
 The Fisher's exact tests compare the proportion of hyper- and hypomethylated DMLs within each genomic feature to the background of all tested CpG sites.
@@ -277,10 +289,10 @@ custom_colors <- c(
   "intergenic" = "#ff8ad8"
 )
 
-ggplot(fisher_results_hyper, aes(x = FeatureLabel, y = OddsRatio, fill = Feature)) +
+ggplot(fisher_results_hyper, aes(x = FeatureLabel, y = FoldEnrichment, fill = Feature)) +
   geom_bar(stat = "identity", width = 0.8, lwd = 0.4, color = "black") +
   geom_text(aes(label = p_display), vjust = -0.5, size = 3.5) +
-  coord_cartesian(ylim = c(0, 2.1)) +
+  coord_cartesian(ylim = c(0, 1.5)) +
   geom_hline(yintercept = 1, linetype = "dashed", color = "gray40") +
   scale_fill_manual(values = custom_colors) +
   labs(
@@ -295,11 +307,10 @@ ggplot(fisher_results_hyper, aes(x = FeatureLabel, y = OddsRatio, fill = Feature
   )
 ggsave("analysis_results/Fold_enrichment_hyper_dmls_in_features.png")
 
-
-ggplot(fisher_results_hypo, aes(x = FeatureLabel, y = OddsRatio, fill = Feature)) +
+ggplot(fisher_results_hypo, aes(x = FeatureLabel, y = FoldEnrichment, fill = Feature)) +
   geom_bar(stat = "identity", width = 0.8, lwd = 0.4, color = "black") +
   geom_text(aes(label = p_display), vjust = -0.5, size = 3.5) +
-  coord_cartesian(ylim = c(0, 2.1)) +
+  coord_cartesian(ylim = c(0, 1.5)) +
   geom_hline(yintercept = 1, linetype = "dashed", color = "gray40") +
   scale_fill_manual(values = custom_colors) +
   labs(
