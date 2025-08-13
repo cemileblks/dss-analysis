@@ -3,11 +3,12 @@ title: "DSS Analysis"
 author: "Cemile Balkas"
 output: html_document
 params:
-  input1: "WT_WG.tidy.dssin.gz" # Reference group 
-  input2: "3BKO_WG.tidy.dssin.gz" # Test group
+  input1: "data/input_bedmethyl_files/HCT116_WT_tidy.dssin.gz" # Reference group 
+  input2: "data/input_bedmethyl_files/HCT116_3BKO_tidy.dssin.gz" # Test group
 ---
 
-To run on command line Rscript -e "rmarkdown::render('Analysis.Rmd', params = list(input1 = 'file_name', input2 = 'file_name'))"
+Most of the initial testing with DMR and bedMethyl files were performed in this file including the parameter comparison of DSS with different delta and p thresholds. The main dss scripts that generate the DSS output files are `dss_analysis.R` or `dss_analysis.Rmd`.
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -31,7 +32,6 @@ if (!requireNamespace("DSS", quietly = TRUE)) {
 # Load required libraries
 library(DSS)
 require(bsseq)
-
 ```
 
 
@@ -39,7 +39,6 @@ require(bsseq)
 cat("Comparing methylation between:\n")
 cat("  - Reference group:", params$input1, "\n")
 cat("  - Test group:", params$input2, "\n")
-
 ```
 
 # Read Files
@@ -76,22 +75,26 @@ wt$chr <- factor(wt$chr, levels = canon_chrs)
 ko$chr <- factor(ko$chr, levels = canon_chrs)
 
 # Reference group coverage boxplot for each chromosome
-boxplot(N ~ chr, data = wt,
-        main = paste0("Coverage by Chromosome Reference Group \n(", params$input1, ")"),
-        ylab = "Coverage (N)",
-        xlab = "Chromosome",
-        col = "skyblue",
-        outline = FALSE,
-        las = 2, cex.axis = 0.7)
+boxplot(N ~ chr,
+  data = wt,
+  main = paste0("Coverage by Chromosome Reference Group \n(", params$input1, ")"),
+  ylab = "Coverage (N)",
+  xlab = "Chromosome",
+  col = "skyblue",
+  outline = FALSE,
+  las = 2, cex.axis = 0.7
+)
 
 # Test group coverage boxplot
-boxplot(N ~ chr, data = ko,
-        main = paste0("Coverage by Chromosome Test Group \n(", params$input2, ")"),
-        ylab = "Coverage (N)",
-        xlab = "Chromosome",
-        col = "coral",
-        outline = FALSE,
-        las = 2, cex.axis = 0.7)
+boxplot(N ~ chr,
+  data = ko,
+  main = paste0("Coverage by Chromosome Test Group \n(", params$input2, ")"),
+  ylab = "Coverage (N)",
+  xlab = "Chromosome",
+  col = "coral",
+  outline = FALSE,
+  las = 2, cex.axis = 0.7
+)
 ```
 ##  Differential Methylation Loci (DML) test
 
@@ -99,7 +102,7 @@ DML test between the two groups is performed using the DMLtest function from the
 
 ```{r dml-test}
 # Run DML test with smoothing (recommended for WGBS data and when there are no replicates)
-dmlTest.sm <- DMLtest(BSobj,  group1="WT", group2="KO", smoothing=TRUE, ncores=4)
+dmlTest.sm <- DMLtest(BSobj, group1 = "WT", group2 = "KO", smoothing = TRUE, ncores = 4)
 head(dmlTest.sm)
 ```
 ## Identify DMLs based on statistical test results
@@ -143,25 +146,25 @@ for (i in 1:nrow(params4)) {
   delta <- params4$delta[i]
   name <- paste0("p", pval, "_d", delta)
   cat("Currently working on pvalue =", pval, "and delta =", delta, "\n")
-  
+
   # DML detection
   dml <- callDML(dmlTest.sm, p.threshold = pval, delta = delta)
   n_dml <- nrow(dml)
-  
+
   # Store the DML object
   dml_list[[name]] <- dml
-  
+
   # DMR detection
   dmr <- callDMR(dmlTest.sm, p.threshold = pval, delta = delta)
   n_dmr <- nrow(dmr)
 
   # Store the DMR object
   dmr_list[[name]] <- dmr
-  
+
   # Count hyper/hypo DMRs
   n_hyper <- sum(dmr$diff.Methy < 0)
   n_hypo <- sum(dmr$diff.Methy > 0)
-  
+
   # Save summary
   results <- rbind(
     results,
@@ -177,8 +180,8 @@ for (i in 1:nrow(params4)) {
   )
 }
 
-write.csv(results_copy, "analysis_results/threshold_dmldmr_count_table.csv", row.names = FALSE)
-
+# write.csv(results_copy, "analysis_results/threshold_dmldmr_count_table.csv", row.names = FALSE)
+results <- read.csv("analysis_results/threshold_dmldmr_count_table.csv", header = TRUE)
 ```
 
 ## FDR estimates for threholds without delta
@@ -186,7 +189,7 @@ write.csv(results_copy, "analysis_results/threshold_dmldmr_count_table.csv", row
 results$pval <- as.numeric(as.character(results$pval))
 
 # Total number of CpG tests
-total_cpgs <- nrow(dmlTest.sm)  # e.g. 27145793
+total_cpgs <- nrow(dmlTest.sm) # e.g. 27145793
 
 # new columns to store estimated FP and FDR
 results$Estimated_FP <- NA
@@ -197,10 +200,10 @@ for (i in 1:nrow(results)) {
   if (results$delta[i] == 0) {
     pval_thresh <- results$pval[i]
     num_dmls <- results$DMLs[i]
-    
+
     est_fp <- pval_thresh * total_cpgs
     est_fdr <- est_fp / num_dmls
-    
+
     results$Estimated_FP[i] <- est_fp
     results$Estimated_FDR[i] <- est_fdr
   }
@@ -219,8 +222,6 @@ ggplot(fdr_est_df, aes(x = name, y = Estimated_FDR * 100)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ggsave("analysis_results/FDR_rates.png")
-
-
 ```
 
 
@@ -234,12 +235,13 @@ results$delta <- as.factor(results$delta)
 
 ggplot(data = results, aes(x = -log10(pval), y = log10(DMLs), group = delta)) +
   geom_line(aes(color = delta), linewidth = 0.8) +
-  geom_point(aes(color = delta, shape = pval_factor), size = 2.6) +
+  geom_point(aes(color = delta), size = 2.6) +
+  # geom_point(aes(color = delta, shape = pval_factor), size = 2.6) +
   scale_color_brewer(palette = "Paired") +
   labs(
     title = "DML Count by p-value and delta threshold",
-    x = expression(-log[10](p~value)),
-    y = expression(log[10](Number~of~DMLs)),
+    x = expression(-log[10](p ~ value)),
+    y = expression(log[10](Number ~ of ~ DMLs)),
     color = "Delta threshold",
     shape = "p-value threshold"
   )
@@ -254,29 +256,28 @@ ggplot(data = results, aes(x = delta, y = log10(DMLs), group = pval)) +
   labs(
     title = "DML Count across delta thresholds (grouped by p-value)",
     x = expression(Delta),
-    y = expression(log[10](Number~of~DMLs)),
-    color = expression(p~value),
+    y = expression(log[10](Number ~ of ~ DMLs)),
+    color = expression(p ~ value),
   )
 ggsave("analysis_results/DML_p_thresholds.png")
-
 ```
 
 ## DMR line plot threshold comparison
 
 ```{r}
-
 results$pval <- as.numeric(as.character(results$pval))
 results$pval_factor <- factor(results$pval)
 results$delta <- as.factor(results$delta)
 
 ggplot(data = results, aes(x = -log10(pval), y = log10(DMRs), group = delta)) +
   geom_line(aes(color = delta), linewidth = 0.8) +
-  geom_point(aes(color = delta, shape = pval_factor), size = 2.6) +
+  # geom_point(aes(color = delta, shape = pval_factor), size = 2.6) +
+  geom_point(aes(color = delta), size = 2.6) +
   scale_color_brewer(palette = "Paired") +
   labs(
     title = "DMR Count by p-value and delta threshold",
-    x = expression(-log[10](p~value)),
-    y = expression(log[10](Number~of~DMRs)),
+    x = expression(-log[10](p ~ value)),
+    y = expression(log[10](Number ~ of ~ DMRs)),
     color = "Delta threshold",
     shape = "p-value threshold"
   )
@@ -291,16 +292,15 @@ ggplot(data = results, aes(x = delta, y = log10(DMRs), group = pval)) +
   labs(
     title = "DMR Count across delta thresholds (grouped by p-value)",
     x = expression(Delta),
-    y = expression(log[10](Number~of~DMRs)),
-    color = expression(p~value),
+    y = expression(log[10](Number ~ of ~ DMRs)),
+    color = expression(p ~ value),
   )
 ggsave("analysis_results/DMR_p_thresholds.png")
-
 ```
 
 ## boxplots
 ```{r}
-options(scipen=999)
+options(scipen = 999)
 bp <- barplot(
   results$DMLs,
   names.arg = results$name,
@@ -335,28 +335,30 @@ lengths_list <- lapply(dmr_list, function(d) log10(d$length))
 ncg_list <- lapply(dmr_list, function(d) log10(d$nCG))
 
 # Set up plotting area (side-by-side)
-par(mfrow = c(1, 2), mar = c(9, 4, 4, 2))  # Extra bottom margin for labels
+par(mfrow = c(1, 2), mar = c(9, 4, 4, 2)) # Extra bottom margin for labels
 
 # Boxplot for log10(DMR lengths)
 boxplot(lengths_list,
-        names = param_names,
-        las = 2,
-        col = "skyblue",
-        main = "DMR Lengths (log10 scale)",
-        ylab = "log10 Length (bp)",
-        cex.axis = 0.7)
+  names = param_names,
+  las = 2,
+  col = "skyblue",
+  main = "DMR Lengths (log10 scale)",
+  ylab = "log10 Length (bp)",
+  cex.axis = 0.7
+)
 
 # Boxplot for log10(CpG counts)
 boxplot(ncg_list,
-        names = param_names,
-        las = 2,
-        col = "tomato",
-        main = "CpG Sites per DMR (log10 scale)",
-        ylab = "log10 CpG Count",
-        cex.axis = 0.7)
+  names = param_names,
+  las = 2,
+  col = "tomato",
+  main = "CpG Sites per DMR (log10 scale)",
+  ylab = "log10 CpG Count",
+  cex.axis = 0.7
+)
 
 # Reset plotting layout
-par(mfrow = c(1,1)) 
+par(mfrow = c(1, 1))
 ```
 
 ## Boxplots without outliers
@@ -369,30 +371,32 @@ lengths_list <- lapply(dmr_list, function(d) d$length)
 ncg_list <- lapply(dmr_list, function(d) d$nCG)
 
 # Set up plotting area (side-by-side)
-par(mfrow = c(1, 2), mar = c(9, 4, 4, 2))  # Extra bottom margin for labels
+par(mfrow = c(1, 2), mar = c(9, 4, 4, 2)) # Extra bottom margin for labels
 
 # Boxplot for log10(DMR lengths)
 boxplot(lengths_list,
-        names = param_names,
-        las = 2,
-        outline = FALSE,
-        col = "skyblue",
-        main = "DMR Lengths (log10 scale)",
-        ylab = "log10 Length (bp)",
-        cex.axis = 0.7)
+  names = param_names,
+  las = 2,
+  outline = FALSE,
+  col = "skyblue",
+  main = "DMR Lengths (log10 scale)",
+  ylab = "log10 Length (bp)",
+  cex.axis = 0.7
+)
 
 # Boxplot for log10(CpG counts)
 boxplot(ncg_list,
-        names = param_names,
-        las = 2,
-        outline = FALSE,
-        col = "tomato",
-        main = "CpG Sites per DMR (log10 scale)",
-        ylab = "log10 CpG Count",
-        cex.axis = 0.7)
+  names = param_names,
+  las = 2,
+  outline = FALSE,
+  col = "tomato",
+  main = "CpG Sites per DMR (log10 scale)",
+  ylab = "log10 CpG Count",
+  cex.axis = 0.7
+)
 
 # Reset plotting layout
-par(mfrow = c(1,1))
+par(mfrow = c(1, 1))
 ```
 
 ## Fold changes
@@ -407,24 +411,25 @@ results$dmrs_vs_ref <- round(results$DMRs / ref_dmrs, 2)
 
 # Plot DML fold-change
 barplot(results$dmls_vs_ref,
-        names.arg = results$name,
-        col = "skyblue",
-        las = 2,
-        main = "Fold Change in DMLs vs Reference (p=0.001, d=0.1)",
-        ylab = "Fold Change",
-        xlab = "",
-        cex.names = 0.8)
+  names.arg = results$name,
+  col = "skyblue",
+  las = 2,
+  main = "Fold Change in DMLs vs Reference (p=0.001, d=0.1)",
+  ylab = "Fold Change",
+  xlab = "",
+  cex.names = 0.8
+)
 
 # Plot DMR fold-change
 barplot(results$dmrs_vs_ref,
-        names.arg = results$name,
-        col = "salmon",
-        las = 2,
-        main = "Fold Change in DMRs vs Reference (p=0.01, d=0.1)",
-        ylab = "Fold Change",
-        xlab = "",
-        cex.names = 0.8)
-
+  names.arg = results$name,
+  col = "salmon",
+  las = 2,
+  main = "Fold Change in DMRs vs Reference (p=0.01, d=0.1)",
+  ylab = "Fold Change",
+  xlab = "",
+  cex.names = 0.8
+)
 ```
 
 
@@ -436,21 +441,22 @@ After the identification of differentially methylated loci (DMLs), differentiall
 options(scipen = 0)
 # Detect DMRs based on smoothed DML test results
 # Call DMRs using p-value threshold only (no effect size filter)
-dmrs = callDMR(dmlTest.sm, p.threshold=0.01)
+dmrs <- callDMR(dmlTest.sm, p.threshold = 0.01)
 head(dmrs)
 
 # Call stricter DMRs using both p-value and effect size thresholds
-dmrs_strict <- callDMR(dmlTest.sm, 
-                       delta = 0.1,         # minimum methylation difference (default: 0)
-                       p.threshold = 0.05,  # significance threshold (default: 1e-5)
-                       minlen = 50,         # minimum DMR length in bp (default: 50)
-                       minCG = 3,           # minimum number of CpGs per DMR (default: 3)
-                       dis.merge = 50,      # merge DMRs closer than this (default: 50 bps)
-                       pct.sig = 0.5)       # % of significant CpGs required (default: 0.5)
+dmrs_strict <- callDMR(dmlTest.sm,
+  delta = 0.1, # minimum methylation difference (default: 0)
+  p.threshold = 0.05, # significance threshold (default: 1e-5)
+  minlen = 50, # minimum DMR length in bp (default: 50)
+  minCG = 3, # minimum number of CpGs per DMR (default: 3)
+  dis.merge = 50, # merge DMRs closer than this (default: 50 bps)
+  pct.sig = 0.5
+) # % of significant CpGs required (default: 0.5)
 head(dmrs_strict)
 
 # Visualise an example DMR
-showOneDMR(dmrs_strict[1,], BSobj)
+showOneDMR(dmrs_strict[1, ], BSobj)
 
 # Extend end coordinate to cover the full CpG site at the end (2bp) for IGV visualisation
 dmrs$end <- dmrs$end + 2
@@ -472,13 +478,12 @@ head(dmrs_strict)
 # Function adapted from https://www.geeksforgeeks.org/outlier-analysis-in-r/
 # to identify outliers using the IQR method
 detect_outlier <- function(x) {
+  Quantile1 <- quantile(x, probs = .25)
+  Quantile3 <- quantile(x, probs = .75)
 
-  Quantile1 <- quantile(x, probs=.25)
-  Quantile3 <- quantile(x, probs=.75)
-  
-  IQR = Quantile3-Quantile1
-  
-  x > Quantile3 + (IQR*1.5) | x < Quantile1 - (IQR*1.5)
+  IQR <- Quantile3 - Quantile1
+
+  x > Quantile3 + (IQR * 1.5) | x < Quantile1 - (IQR * 1.5)
 }
 
 # Count the number of outliers in DMR length and CpG count for both sets
@@ -498,48 +503,57 @@ summary(dmrs$nCG)
 summary(dmrs_strict$nCG)
 
 # Scatter plots: DMR length vs CpG count
-par(mfrow=c(1,2))
-plot(dmrs$length, dmrs$nCG, 
-     xlab="Length (bp)", ylab="Number of CpG sites", 
-     main="Loose DMRs:\nLength vs CpG Count", ylim = c(0, 500), xlim = c(0, 30000),
-     pch=16, col=rgb(0,0,1,0.5), cex=0.7)
+par(mfrow = c(1, 2))
+plot(dmrs$length, dmrs$nCG,
+  xlab = "Length (bp)", ylab = "Number of CpG sites",
+  main = "Loose DMRs:\nLength vs CpG Count", ylim = c(0, 500), xlim = c(0, 30000),
+  pch = 16, col = rgb(0, 0, 1, 0.5), cex = 0.7
+)
 
-plot(dmrs_strict$length, dmrs_strict$nCG, 
-     xlab="Length (bp)", ylab="Number of CpG sites", 
-     main="Strict DMRs:\nLength vs CpG Count", ylim = c(0, 500), xlim = c(0, 30000),
-     pch=16, col=rgb(1,0,0,0.5), cex=0.7)
+plot(dmrs_strict$length, dmrs_strict$nCG,
+  xlab = "Length (bp)", ylab = "Number of CpG sites",
+  main = "Strict DMRs:\nLength vs CpG Count", ylim = c(0, 500), xlim = c(0, 30000),
+  pch = 16, col = rgb(1, 0, 0, 0.5), cex = 0.7
+)
 
 # Boxplots to compare DMR length and CpG count distributions
-boxplot(dmrs$length, dmrs_strict$length, names=c("Loose", "Strict"),
-        main="DMR Lengths", ylab="Length (bp)", col=c("skyblue", "tomato"))
+boxplot(dmrs$length, dmrs_strict$length,
+  names = c("Loose", "Strict"),
+  main = "DMR Lengths", ylab = "Length (bp)", col = c("skyblue", "tomato")
+)
 
-boxplot(dmrs$nCG, dmrs_strict$nCG, names=c("Loose", "Strict"),
-        main="CpG Sites per DMR", ylab="CpG Count", col=c("lightgreen", "orange"))
+boxplot(dmrs$nCG, dmrs_strict$nCG,
+  names = c("Loose", "Strict"),
+  main = "CpG Sites per DMR", ylab = "CpG Count", col = c("lightgreen", "orange")
+)
 
-# log 10 scale 
+# log 10 scale
 # Log10 boxplot for DMR lengths
 boxplot(log10(dmrs$length), log10(dmrs_strict$length),
-        names = c("Loose", "Strict"),
-        main = "DMR Lengths (log10 scale)",
-        ylab = "log10 Length (bp)",
-        col = c("skyblue", "tomato"))
+  names = c("Loose", "Strict"),
+  main = "DMR Lengths (log10 scale)",
+  ylab = "log10 Length (bp)",
+  col = c("skyblue", "tomato")
+)
 
 # Log10 boxplot for CpG counts
 boxplot(log10(dmrs$nCG), log10(dmrs_strict$nCG),
-        names = c("Loose", "Strict"),
-        main = "CpG Sites per DMR (log10 scale)",
-        ylab = "log10 CpG Count",
-        col = c("lightgreen", "orange"))
+  names = c("Loose", "Strict"),
+  main = "CpG Sites per DMR (log10 scale)",
+  ylab = "log10 CpG Count",
+  col = c("lightgreen", "orange")
+)
 
 # Boxplots without outliers for a clearer look at the core distribution
-boxplot(dmrs$length, dmrs_strict$length, 
-        names=c("Loose", "Strict"), 
-        main="DMR Lengths", ylab="Length (bp)", outline=FALSE, col=c("skyblue", "tomato"))
+boxplot(dmrs$length, dmrs_strict$length,
+  names = c("Loose", "Strict"),
+  main = "DMR Lengths", ylab = "Length (bp)", outline = FALSE, col = c("skyblue", "tomato")
+)
 
-boxplot(dmrs$nCG, dmrs_strict$nCG, 
-        names=c("Loose", "Strict"), 
-        main="CpG Count per DMR", ylab="# CpG sites",outline=FALSE, col=c("lightgreen", "orange"))
-
+boxplot(dmrs$nCG, dmrs_strict$nCG,
+  names = c("Loose", "Strict"),
+  main = "CpG Count per DMR", ylab = "# CpG sites", outline = FALSE, col = c("lightgreen", "orange")
+)
 ```
 ### Assign unique identifiers to each DMR
 
@@ -558,7 +572,6 @@ dmrs$name <- paste0(dmr_id_prefix, "_", dmrs$DMR_ID, "_", toupper(dmrs$chr))
 dmr_strict_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT")
 dmrs_strict$DMR_ID <- seq_len(nrow(dmrs_strict))
 dmrs_strict$name <- paste0(dmr_strict_id_prefix, "_", dmrs_strict$DMR_ID, "_", toupper(dmrs_strict$chr))
-
 ```
 
 ### Split strict DMRs by methylation direction
@@ -577,20 +590,19 @@ dmrs_hyper_id_prefix <- paste0(test_label, "_DSS_DMR_HYPER")
 dmrs_hypo_id_prefix <- paste0(test_label, "_DSS_DMR_HYPO")
 
 dmrs_hyper$name <- sub("DMR_", "DMR_HYPER_", dmrs_hyper$name)
-dmrs_hypo$name  <- sub("DMR_", "DMR_HYPO_", dmrs_hypo$name)
+dmrs_hypo$name <- sub("DMR_", "DMR_HYPO_", dmrs_hypo$name)
 
 # ------------------------
 
 dmrs_strict_hyper <- subset(dmrs_strict, diff.Methy < 0)
-dmrs_strict_hypo  <- subset(dmrs_strict, diff.Methy > 0)
+dmrs_strict_hypo <- subset(dmrs_strict, diff.Methy > 0)
 
 dmrs_strict_hyper_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT_HYPER")
 dmrs_strict_hypo_id_prefix <- paste0(test_label, "_DSS_DMR_STRICT_HYPO")
 
 # Update DMR names to include methylation direction
 dmrs_strict_hyper$name <- sub("DMR_STRICT_", "DMR_STRICT_HYPER_", dmrs_strict_hyper$name)
-dmrs_strict_hypo$name  <- sub("DMR_STRICT_", "DMR_STRICT_HYPO_", dmrs_strict_hypo$name)
-
+dmrs_strict_hypo$name <- sub("DMR_STRICT_", "DMR_STRICT_HYPO_", dmrs_strict_hypo$name)
 ```
 
 ## Output Summary
@@ -605,7 +617,6 @@ cat("    Hypomethylated:", nrow(dmrs_hypo), "\n")
 cat("  Total Strict DMRs:", nrow(dmrs_strict), "\n")
 cat("    Strict hypermethylated:", nrow(dmrs_strict_hyper), "\n")
 cat("    Strict hypomethylated:", nrow(dmrs_strict_hypo), "\n")
-
 ```
 
 ## Save DML and DMR results to files
@@ -613,7 +624,7 @@ cat("    Strict hypomethylated:", nrow(dmrs_strict_hypo), "\n")
 "STRICT" files apply a more conservative threshold (delta = 0.1, p < 0.05, etc.) and are more likely to be actual DMRs. Regular DMRs (detected using p < 0.01 only) may include less accurate or noisy sites.
 
 ```{r}
-options(scipen=999) # to prevent scientific notation on tables
+options(scipen = 999) # to prevent scientific notation on tables
 
 today <- format(Sys.Date(), "%d_%m_%Y")
 
@@ -633,42 +644,50 @@ dmr_file_strict <- paste0(prefix, "_DMRs_STRICT.bed")
 
 # Additional hypo/hyper output files
 dmr_file_hyper <- paste0(prefix, "_DMRs_HYPER.bed")
-dmr_file_hypo  <- paste0(prefix, "_DMRs_HYPO.bed")
+dmr_file_hypo <- paste0(prefix, "_DMRs_HYPO.bed")
 dmr_file_strict_hyper <- paste0(prefix, "_DMRs_STRICT_HYPER.bed")
-dmr_file_strict_hypo  <- paste0(prefix, "_DMRs_STRICT_HYPO.bed")
+dmr_file_strict_hypo <- paste0(prefix, "_DMRs_STRICT_HYPO.bed")
 
 # Write results to files
 write.table(dmls[, c("chr", "pos", "end")],
-            file = dml_file,
-            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+  file = dml_file,
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE
+)
 
 write.table(dmls_strict[, c("chr", "pos", "end")],
-            file = dml_file2,
-            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+  file = dml_file2,
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE
+)
 
 write.table(dmrs[, c("chr", "start", "end", "name")],
-            file = dmr_file,
-            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+  file = dmr_file,
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE
+)
 
 write.table(dmrs_hyper[, c("chr", "start", "end", "name")],
-            file = dmr_file_hyper,
-            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+  file = dmr_file_hyper,
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE
+)
 
 write.table(dmrs_hypo[, c("chr", "start", "end", "name")],
-            file = dmr_file_hypo,
-            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+  file = dmr_file_hypo,
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE
+)
 
 write.table(dmrs_strict[, c("chr", "start", "end", "name")],
-            file = dmr_file_strict,
-            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+  file = dmr_file_strict,
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE
+)
 
 write.table(dmrs_strict_hyper[, c("chr", "start", "end", "name")],
-            file = dmr_file_strict_hyper,
-            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+  file = dmr_file_strict_hyper,
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE
+)
 
 write.table(dmrs_strict_hypo[, c("chr", "start", "end", "name")],
-            file = dmr_file_strict_hypo,
-            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+  file = dmr_file_strict_hypo,
+  sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE
+)
 
 # Outputs
 cat("Saving DMLs to:", dml_file, "\n")
@@ -681,7 +700,6 @@ cat("Saving strict DMRs to:", dmr_file_strict, "\n")
 cat("Saving strict hyper DMRs to:", dmr_file_strict_hyper, "\n")
 cat("Saving strict hypo DMRs to:", dmr_file_strict_hypo, "\n")
 cat("Done.")
-
 ```
 
 ## Session Info

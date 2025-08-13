@@ -18,6 +18,7 @@ The aim is to see if DMLs are randomly distributed or if they tend to cluster in
 
 ```{r setup, include=FALSE}
 library(knitr)
+library(ggplot2)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -174,7 +175,7 @@ for (i in 1:nrow(df_dml_feature_counts)) {
     Hyper_dmls = total_hyper_dmls_in_feature,
     p_value = fisher_pval,
     OddsRatio = odds_ratio
-  ))
+  )) 
 }
 
 kable(fisher_results_hyper, caption = "Fisher's test results for hypermethylated DMLs (exclusive features)")
@@ -262,10 +263,10 @@ fisher_results_hypo$p_display <- ifelse(fisher_results_hypo$p_value < 2.2e-16, "
 # Rename bar column names 
 label_map <- c(
   tss = "TSS",
-  `5utrs` = "5′ UTR",
+  `5utrs` = "5' UTR",
   exons = "Exons",
   introns = "Introns",
-  `3utrs` = "3′ UTR",
+  `3utrs` = "3' UTR",
   downstream_1kb = "Downstream (1kb)",
   intergenic = "Intergenic"
 )
@@ -275,7 +276,7 @@ fisher_results_hyper$FeatureLabel <- label_map[as.character(fisher_results_hyper
 fisher_results_hypo$FeatureLabel <- label_map[as.character(fisher_results_hypo$Feature)]
 
 # Set factor order for feature
-feature_order <- c("TSS", "5′ UTR", "Exons", "Introns", "3′ UTR", "Downstream (1kb)", "Intergenic")
+feature_order <- c("TSS", "5' UTR", "Exons", "Introns", "3' UTR", "Downstream (1kb)", "Intergenic")
 fisher_results_hyper$FeatureLabel <- factor(fisher_results_hyper$FeatureLabel, levels = feature_order)
 fisher_results_hypo$FeatureLabel  <- factor(fisher_results_hypo$FeatureLabel, levels = feature_order)
 
@@ -307,7 +308,7 @@ ggplot(fisher_results_hyper, aes(x = FeatureLabel, y = FoldEnrichment, fill = Fe
     plot.margin = margin(t = 10, r = 10, b = 10, l = 10),
     legend.position = "none"
   )
-ggsave("analysis_results/Fold_enrichment_hyper_dmls_in_features.png", width = 5, height = 6, units = "in")
+# ggsave("analysis_results/Fold_enrichment_hyper_dmls_in_features.png", width = 5, height = 6, units = "in")
 
 ggplot(fisher_results_hypo, aes(x = FeatureLabel, y = FoldEnrichment, fill = Feature)) +
   geom_bar(stat = "identity", width = 0.8, lwd = 0.4, color = "black") +
@@ -327,7 +328,7 @@ ggplot(fisher_results_hypo, aes(x = FeatureLabel, y = FoldEnrichment, fill = Fea
     plot.margin = margin(t = 10, r = 10, b = 10, l = 10),
     legend.position = "none"
   )
-ggsave("analysis_results/Fold_enrichment_hypo_dmls_in_features.png", width = 5, height = 6, units = "in")
+# ggsave("analysis_results/Fold_enrichment_hypo_dmls_in_features.png", width = 5, height = 6, units = "in")
 
 
 ```
@@ -370,13 +371,13 @@ fisher_results_hypo$`Fold Enrichment` <- round(fisher_results_hypo$FoldEnrichmen
 # Update p-values again just to ensure format
 fisher_results_hyper$p_display <- ifelse(
   fisher_results_hyper$p_value < 2.2e-16,
-  "<2.2 × 10⁻¹⁶",
+  "<2.2 × 10^-16",
   formatC(fisher_results_hyper$p_value, format = "e", digits = 2)
 )
 
 fisher_results_hypo$p_display <- ifelse(
   fisher_results_hypo$p_value < 2.2e-16,
-  "<2.2 × 10⁻¹⁶",
+  "<2.2 × 10^-16",
   formatC(fisher_results_hypo$p_value, format = "e", digits = 2)
 )
 
@@ -388,7 +389,7 @@ hypo_table <- fisher_results_hypo[, c("FeatureLabel", "CpG_count", "Hypo_dmls", 
 colnames(hypo_table) <- c("Feature", "CpG Count", "Hypo DMLs", "P-value", "Odds Ratio", "Fold Enrichment")
 
 # Define the desired order
-feature_order <- c("TSS", "5′ UTR", "Exons", "Introns", "3′ UTR", "Downstream (1kb)", "Intergenic")
+feature_order <- c("TSS", "5' UTR", "Exons", "Introns", "3' UTR", "Downstream (1kb)", "Intergenic")
 
 # Apply order to both tables
 hyper_table$Feature <- factor(hyper_table$Feature, levels = feature_order)
@@ -471,9 +472,10 @@ Differentially methylated regions (DMRs) were identified using the same statisti
 
 Although permutation-based methods could be used in principle to assess the significance of DMRs, they are computationally intensive and were not applied here due to time constraints. However, since our Fisher's exact tests demonstrated that DMLs detected under the same parameters are highly statistically significant across multiple genomic features, we can infer that the DMRs identified are also likely to be satisfactory. 
 
+
+```{r include = FALSE}
 ## Testing how Fisher's Test work...
 
-```{r tests}
 # my_test_df <- data.frame(
 #   Background = c(492557, 27145793 - 492557), HypoDML = c(11190, 1762487 - 11190),
 #   row.names = c("TSS", "NOT-TSS")

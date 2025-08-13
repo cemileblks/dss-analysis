@@ -63,7 +63,7 @@ gene_list_files <- list(
 gene_groups <- lapply(gene_list_files, read_lines)
 ```
 
-## Compare Log2FC Distributions
+## Compare Log2FC Distributions (without p values)
 
 ```{r log2fc-distributions-simple}
 # combine all gene lists (tss, introns etc) into one big table with labels
@@ -118,6 +118,7 @@ ggplot(plot_df_hyper, aes(x = group, y = log2FoldChange.y, fill = group)) +
   ) +
   theme_classic() +
   theme(
+    plot.title = element_text(colour = "#CD2626"),
     axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
     legend.position = "none"
   ) 
@@ -134,6 +135,7 @@ ggplot(plot_df_hypo, aes(x = group, y = log2FoldChange.y, fill = group)) +
   ) +
   theme_classic() +
   theme(
+    plot.title = element_text(color = "#3A5FCD"),
     axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
     legend.position = "none"
   )
@@ -148,7 +150,7 @@ However there is only slight increase in expression levels in the hypo_tss group
 Rest of the groups hover around 0 not showing any extreme biases in changes in expression levels. The variance in most box plots also seem to tight except the hyper_tss group.
 
 
-# Wilcoxon rank-sum test
+# Wilcoxon rank-sum tests
 
 Are the log2FoldChanges for genes with, hypermethylated TSSs systematically different from other genes?
 
@@ -203,6 +205,8 @@ wilcox_results %>%
   ))
 
 ```
+## Compare Log2FC Distributions (with p values)
+
 ```{r fold-change-plots with p values}
 autosomes <- as.character(1:22)
 
@@ -258,10 +262,13 @@ ggboxplot(
   ) +
   theme_classic() +
   theme(
+    plot.title = element_text(colour = "#CD2626"),
     axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    plot.margin = margin(t = 10, r = 10, b = 10, l = 10),
     legend.position = "none"
   ) +
-  stat_pvalue_manual(pvals_df, label = "p.label", xmin = "group2", xmax = "group2")
+  stat_pvalue_manual(pvals_df, label = "p.label", xmin = "group2", xmax = "group2", size = 3.6)
+# ggsave("analysis_results/gene_log2foldchange_hyper_dmr.png", height = 6.5, units = "in")
 
 # Plot for hypo features --------------------------------------------------------------
 pvals_df <- lapply(hypo_features, function(g) {
@@ -292,16 +299,15 @@ ggboxplot(
   ) +
   theme_classic() +
   theme(
+    plot.title = element_text(color = "#3A5FCD"),
     axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    plot.margin = margin(t = 10, r = 10, b = 10, l = 10),
     legend.position = "none"
   ) +
-  stat_pvalue_manual(pvals_df, label = "p.label", xmin = "group2", xmax = "group2")
-
+  stat_pvalue_manual(pvals_df, label = "p.label", xmin = "group2", xmax = "group2", size = 3.6)
+# ggsave("analysis_results/gene_log2foldchange_hypo_dmr.png", height = 6.5, units = "in")
 
 ```
-
-
-
 
 ## How many genes are there per group? 
 ## How many are up/down regulated 
@@ -651,51 +657,5 @@ emapplot(ora_overlap_downregulated_bp, color = "qvalue")
 # }
 ```
 
-
-
-## Hyper-DMVs/ Downregulated genes
-
-DMVs -> normally are low in methyaltion and are associated with developmental genes and enriched with transcription factor binding sites, so open to transcription normally.
-
-After Dnmt3b knockout, some regions inside DMVs gained methylation (hyper-DMRs).
-
-From the DMR feature group comparison, I noticed that genes associated with hyper_dmvs had visible downregulation because the median log2FC more in the negative side. 
-
-Since DMVs are normally unmethylated and often regulate developmental genes, I wanted to know whether this downregulation was because the DMRs were at promoters, or whether methylation in other parts of DMVs could be repressing gene expression.
-
-I checked how many of the downregulated DMV genes were also part of the hyper_tss group.Out of 31 downregulated DMV genes, only 13 (around 42%) also had hypermethylated promoters so other regions being hypermethyalted could have also contributed to their downregulation?
-
-```{r}
-# # Count how many downregulated and hyper mehtylated genes in DMVs are also in hyper-TSS group
-# length(intersect(dmr_gene_expression$hyper_dmvs$down$Ensembl_id, dmr_gene_expression$hyper_tss$down$Ensembl_id))
-# # 13 genes
-# 
-# dmr_gene_expression$hyper_dmvs$down$external_gene_name %>% head(n = 20)
-# 
-# # GO enrichment for the 31 downregulated DMV genes
-# ora_hyper_dmvs_down_bp <- enrichGO(
-#   gene          = dmr_gene_expression$hyper_dmvs$down$Ensembl_id,
-#   universe      = universe_genes,
-#   OrgDb         = org.Hs.eg.db,
-#   keyType       = "ENSEMBL",
-#   ont           = "BP",
-#   pAdjustMethod = "BH",
-#   qvalueCutoff  = 0.05,
-#   readable      = TRUE,
-#   pool          = FALSE
-# )
-# 
-# # Simplify and check results
-# ora_hyper_dmvs_down_simplified_bp <- clusterProfiler::simplify(ora_hyper_dmvs_down_bp)
-# head(ora_hyper_dmvs_down_simplified_bp@result)
-# 
-# # Plot if there are results
-# if (nrow(ora_hyper_dmvs_down_simplified_bp@result) > 0) {
-#   dotplot(ora_hyper_dmvs_down_simplified_bp)
-# } else {
-#   message("No significant enrichment results to plot.")
-# }
-
-```
 
 

@@ -29,9 +29,10 @@ rotate_x <- function(data, rot_angle, main_title, y_label) {
   plt <- barplot(data,
     xaxt = "n",
     las = 2,
-    ylim = c(0, max(data) * 1.2),
+    ylim = c(0, 75),
     main = main_title,
     ylab = y_label,
+    xlab = "Genomic Feature",
     col = colors
   )
 
@@ -45,6 +46,35 @@ rotate_x <- function(data, rot_angle, main_title, y_label) {
     pos = 3, cex = 0.7
   ) # pos=3 means above bar
 }
+# same function but more high quality graphics with ggplot2
+library(ggplot2)
+rotate_x_ggplot <- function(data, rot_angle = 45, main_title = "", y_label = "", title_color = "black") {
+  # Convert named vector to data frame
+  df <- data.frame(
+    Feature = factor(names(data), levels = names(data)),
+    Percentage = as.numeric(data)
+  )
+  
+  # Assign rainbow colors
+  df$Color <- rainbow(nrow(df))
+  
+  # Create plot
+  ggplot(df, aes(x = Feature, y = Percentage, fill = Feature)) +
+    geom_bar(stat = "identity", show.legend = FALSE, lwd = 0.3, color = "black") +
+    scale_fill_manual(values = df$Color) +
+    geom_text(aes(label = round(Percentage, 1)), vjust = -0.5, size = 3) +
+    labs(
+      title = main_title,
+      x = "Genomic Feature",
+      y = y_label
+    ) +
+    theme_classic() +
+    theme(
+      plot.title = element_text(color = title_color),
+      axis.text.x = element_text(angle = rot_angle, hjust = 1)
+    )
+}
+
 ```
 
 # DMLs
@@ -68,9 +98,62 @@ dml_percentages <- setNames(df_dml_feature_counts$Percent_of_DMLs, df_dml_featur
 dml_percentages <- dml_percentages[custom_order]
 
 # Use custom plot function
-rotate_x(dml_percentages, rot_angle = 45, main_title = "DML distribution across genomic features", y_label ="Percentage of DMLs (%)")
-```
+# rotate_x(dml_percentages, rot_angle = 45, main_title = "DML distribution across genomic features", y_label ="Percentage of DMLs (%)")
+rotate_x_ggplot(dml_percentages, rot_angle = 45, main_title = "DML distribution across genomic features", y_label ="Percentage of DMLs (%)")
 
+# --------------
+
+total_hyper_dmls <- sum(df_dml_feature_counts$HyperDMLs)
+hyper_dml_counts <- df_dml_feature_counts$HyperDMLs
+names(hyper_dml_counts) <- df_dml_feature_counts$Feature
+
+# Calculate percentages
+dml_percentages <- round(100 * hyper_dml_counts / total_hyper_dmls, 2)
+
+# Define order for plot
+custom_order <- c("tss", "5utrs", "exons", "introns", "3utrs", "downstream_1kb", "intergenic")
+
+# Reorder the dmr_percentages vector
+dml_percentages <- dml_percentages[custom_order]
+
+label_map <- c(
+  tss = "TSS",
+  `5utrs` = "5′ UTR",
+  exons = "Exons",
+  introns = "Introns",
+  `3utrs` = "3′ UTR",
+  downstream_1kb = "Downstream (1kb)",
+  intergenic = "Intergenic"
+)
+
+# Rename dmr_percentages using label_map
+names(dml_percentages) <- label_map[names(dml_percentages)]
+rotate_x_ggplot(dml_percentages, rot_angle = 45, main_title = "Hyper DML distribution across genomic features", y_label ="Percentage of Hyper DMLs (%)", title_color = "#CD2626")
+ggsave("analysis_results/DML_HYPER_genomic_feature_distribution.png")
+
+# --------------
+
+total_hypo_dmls <- sum(df_dml_feature_counts$HypoDMLs)
+hypo_dml_counts <- df_dml_feature_counts$HypoDMLs
+names(hypo_dml_counts) <- df_dml_feature_counts$Feature
+
+# Calculate percentages
+dml_percentages <- round(100 * hypo_dml_counts / total_hypo_dmls, 2)
+
+# Define order for plot
+custom_order <- c("tss", "5utrs", "exons", "introns", "3utrs", "downstream_1kb", "intergenic")
+
+# Reorder the dmr_percentages vector
+dml_percentages <- dml_percentages[custom_order]
+
+# Rename dmr_percentages using label_map
+names(dml_percentages) <- label_map[names(dml_percentages)]
+rotate_x_ggplot(dml_percentages, rot_angle = 45, main_title = "Hypo DML distribution across genomic features", y_label ="Percentage of Hypo DMLs (%)", title_color = "#3A5FCD")
+# ggsave("analysis_results/DML_dist_hypo.png", width = 5, height = 6, units = "in")
+ggsave("analysis_results/DML_HYPO_genomic_feature_distribution.png")
+
+
+```
 
 # DMRs
 ## Load DMRs in Feature overlap files and visualise in bar graph
@@ -101,13 +184,23 @@ dmr_percentages <- round(100 * dmr_counts / total_dmrs, 2)
 # Reorder the dmr_percentages vector
 dmr_percentages <- dmr_percentages[custom_order]
 
-# Clean feature names
-names(dmr_counts) <- gsub("^all_dmrs_in_|\\.bed$", "", basename(names(dmr_counts)))
+label_map <- c(
+  tss = "TSS",
+  `5utrs` = "5′ UTR",
+  exons = "Exons",
+  introns = "Introns",
+  `3utrs` = "3′ UTR",
+  downstream_1kb = "Downstream (1kb)",
+  intergenic = "Intergenic"
+)
+
+# Rename dmr_percentages using label_map
+names(dmr_percentages) <- label_map[names(dmr_percentages)]
 
 # png(filename="analysis_results/DMR_genomic_feature_distribution.png", width = 600, height = 380)
 
 # Plot with the custom rotate_x function
-rotate_x(dmr_percentages, rot_angle = 45, main_title = "DMR distribution across genomic features", y_label ="Percentage of DMRs (%)")
+rotate_x_ggplot(dmr_percentages, rot_angle = 45, main_title = "DMR distribution across genomic features", y_label ="Percentage of DMRs (%)")
 
 # dev.off()
 
@@ -137,14 +230,25 @@ dmr_percentages <- round(100 * dmr_counts / total_hyper_dmrs, 2)
 # Reorder the dmr_percentages vector
 dmr_percentages <- dmr_percentages[custom_order]
 
-# Clean feature names
-names(dmr_counts) <- gsub("^hyper_dmrs_in_|\\.bed$", "", basename(names(dmr_counts)))
+label_map <- c(
+  tss = "TSS",
+  `5utrs` = "5′ UTR",
+  exons = "Exons",
+  introns = "Introns",
+  `3utrs` = "3′ UTR",
+  downstream_1kb = "Downstream (1kb)",
+  intergenic = "Intergenic"
+)
+
+# Rename dmr_percentages using label_map
+names(dmr_percentages) <- label_map[names(dmr_percentages)]
 
 # png(filename="analysis_results/DMR_HYPER_genomic_feature_distribution.png", width = 600, height = 380)
 
 # Plot with the custom rotate_x function
-rotate_x(dmr_percentages, rot_angle = 45, main_title = "Hypermethylated DMR distribution across genomic features", y_label ="Percentage of Hypermethylated DMRs (%)")
-
+rotate_x(dmr_percentages, rot_angle = 45, main_title = "Hypermethylated DMR distribution across genomic features", y_label ="Hypermethylated DMRs (%)")
+rotate_x_ggplot(dmr_percentages, rot_angle = 45, main_title = "Hypermethylated DMR distribution across genomic features", y_label ="Hypermethylated DMRs (%)", title_color = "#CD2626")
+ggsave("analysis_results/DMR_HYPER_genomic_feature_distribution.png")
 # dev.off()
 
 ```
@@ -174,13 +278,27 @@ dmr_percentages <- round(100 * dmr_counts / total_hypo_dmrs, 2)
 # Reorder the dmr_percentages vector
 dmr_percentages <- dmr_percentages[custom_order]
 
-# Clean feature names
-names(dmr_counts) <- gsub("^hypo_dmrs_in_|\\.bed$", "", basename(names(dmr_counts)))
+label_map <- c(
+  tss = "TSS",
+  `5utrs` = "5′ UTR",
+  exons = "Exons",
+  introns = "Introns",
+  `3utrs` = "3′ UTR",
+  downstream_1kb = "Downstream (1kb)",
+  intergenic = "Intergenic"
+)
 
-# png(filename="analysis_results/DMR_HYPER_genomic_feature_distribution.png", width = 600, height = 380)
+# Rename dmr_percentages using label_map
+names(dmr_percentages) <- label_map[names(dmr_percentages)]
+
+
+# png(filename="analysis_results/DMR_HYPO_genomic_feature_distribution.png", width = 600, height = 380)
 
 # Plot with the custom rotate_x function
-rotate_x(dmr_percentages, rot_angle = 45, main_title = "Hypomethlated DMR distribution across genomic features", y_label ="Percentage of Hypermethylated DMRs (%)")
+rotate_x(dmr_percentages, rot_angle = 45, main_title = "Hypomethlated DMR distribution across genomic features", y_label ="Hypomethylated DMRs (%)")
+
+rotate_x_ggplot(dmr_percentages, rot_angle = 45, main_title = "Hypomethlated DMR distribution across genomic features", y_label ="Hypomethylated DMRs (%)", title_color = "#3A5FCD")
+ggsave("analysis_results/DMR_HYPO_genomic_feature_distribution.png")
 
 # dev.off()
 
