@@ -1,5 +1,47 @@
 #!/usr/bin/bash
 
+# -----------------------------------------------------------------------------
+# Script: intersect_dmrs_w_features_and_genes.sh
+#
+# Purpose: Intersects DMRs with predefined genomic annotation features (e.g., TSS, exons, introns) and 
+#   then maps the overlapping regions to protein-coding genes. It can run in:
+#     1. Non-exclusive mode: DMRs may be assigned to multiple features
+#     2. Exclusive (precedence) mode: Each DMR is assigned to the first 
+#        matching feature according to a defined precedence order
+#
+# Usage:
+#   ./intersect_dmrs_w_features_and_genes.sh [--hyper FILE] [--hypo FILE] [--dmr FILE] [--wp] [--out DIR]
+#
+# Inputs:
+#   --hyper FILE : BED file of hyper-methylated DMRs (optional)
+#   --hypo  FILE : BED file of hypo-methylated DMRs (optional)
+#   --dmr   FILE : BED file of all DMRs (optional, combined hyper + hypo)
+#   --wp          : Enable feature precedence assignment 
+#                   (TSS > downstream_1kb > 5' UTR > 3' UTR > exons > introns > intergenic)
+#   --out  DIR  : Output directory (default: dmr_feature_gene_mapping_output/)
+#
+# Outputs:
+#   - *_dmrs_in_<feature>.bed   : DMRs overlapping each feature
+#   - *_<feature>_gene_hits.tsv : Overlapping DMR–gene matches
+#   - *_<feature>_gene_ids.txt  : Unique Ensembl IDs of overlapping genes
+#
+# Feature precedence (when --wp is enabled):
+#   TSS > downstream_1kb > 5' UTR > 3' UTR > exons > introns > intergenic
+#
+# Requirements:
+#   - bedtools installed and available in PATH
+#   - Annotation BED files located in ./data/annotation_data/ with names like:
+#       hg38_tss.bed, hg38_exons.bed, hg38_introns.bed, etc.
+#   - A BED file of protein-coding genes named:
+#       hg38_protein_coding_genes.bed (4 columns, Ensembl ID in column 4)
+#
+# Notes:
+#   - BED inputs must be sorted and use hg38 coordinates
+#   - In non-exclusive mode, a single DMR may appear in multiple feature files
+#   - In precedence mode (--wp), DMRs are removed from the remaining set 
+#     once assigned to a feature
+# -----------------------------------------------------------------------------
+
 set -euo pipefail
 
 # Defaults
